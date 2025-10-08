@@ -1,34 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import './App.css'
-import { Header } from './components/Header'
-import { useAuth } from './hooks/useAuth'
-import { HomePage } from './pages/HomePage'
-import { LoginPage } from './pages/LoginPage'
-import { RegisterPage } from './pages/RegisterPage'
-import { NewCoursePage } from './pages/NewCoursePage'
-import { CoursePage } from './pages/CoursePage'
-import { TopicPage } from './pages/TopicPage'
-
-export default function App() {
-  const { auth, login, logout } = useAuth()
-  return (
-    <BrowserRouter>
-      <Header auth={auth} onLogout={logout} />
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/login" element={<LoginPage onLogin={login} />} />
-        <Route path="/register" element={<RegisterPage />} />
-        <Route path="/new" element={<NewCoursePage />} />
-        <Route path="/courses/:courseId" element={<CoursePage />} />
-        <Route path="/topics/:topicId" element={<TopicPage />} />
-      </Routes>
-    </BrowserRouter>
-  )
-}
-
-function MarkdownRenderer({ markdown }: { markdown: string }) {
-  // Lightweight markdown-to-HTML using browser-safe approach
-  // For simplicity, use a very small converter for common syntax
+export function MarkdownRenderer({ markdown }: { markdown: string }) {
   const html = toHtml(markdown)
   return (
     <div
@@ -44,7 +14,6 @@ function MarkdownRenderer({ markdown }: { markdown: string }) {
         .prose pre { margin: 10px 0; overflow: auto; text-align: left; background: #1f2937; color: #f3f4f6; padding: 12px; border-radius: 8px; position: relative; }
         .prose pre .lang-badge { position: absolute; top: 6px; right: 8px; font-size: 12px; color: #9ca3af; }
         .prose code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-        /* Minimal token colors */
         .tok-keyword { color: #93c5fd; }
         .tok-string  { color: #86efac; }
         .tok-number  { color: #fca5a5; }
@@ -65,8 +34,6 @@ function escapeHtml(s: string) {
 }
 
 function toHtml(md: string) {
-  // Very basic converter: headings, bold, italics, inline code, lists, paragraphs
-  // Extract fenced code blocks first and protect them with placeholders
   let original = md.replace(/\r\n/g, '\n')
   const codeBlocks: string[] = []
   original = original.replace(/```([a-zA-Z0-9_+-]+)?\n([\s\S]*?)```/g, (_m, lang, body) => {
@@ -76,28 +43,23 @@ function toHtml(md: string) {
       .replace(/\n{2,}/g, '\n')
       .replace(/^\n+|\n+$/g, '')
     const highlighted = highlightCode(language, inner)
-    const badge = language ? `<span class=\"lang-badge\">${language}</span>` : ''
-    const html = `<pre style=\"background:#1f2937;color:#f3f4f6;padding:12px;border-radius:8px;overflow:auto\">${badge}<code>${highlighted}</code></pre>`
+    const badge = language ? `<span class="lang-badge">${language}</span>` : ''
+    const html = `<pre style="background:#1f2937;color:#f3f4f6;padding:12px;border-radius:8px;overflow:auto">${badge}<code>${highlighted}</code></pre>`
     const token = `__CODE_BLOCK_${codeBlocks.length}__`
     codeBlocks.push(html)
     return token
   })
 
-  // Escape the rest
   let text = escapeHtml(original.trim())
-  // headings
   text = text.replace(/^######\s+(.*)$/gm, '<h6>$1</h6>')
   text = text.replace(/^#####\s+(.*)$/gm, '<h5>$1</h5>')
   text = text.replace(/^####\s+(.*)$/gm, '<h4>$1</h4>')
   text = text.replace(/^###\s+(.*)$/gm, '<h3>$1</h3>')
   text = text.replace(/^##\s+(.*)$/gm, '<h2>$1</h2>')
   text = text.replace(/^#\s+(.*)$/gm, '<h1>$1</h1>')
-  // inline code
   text = text.replace(/`([^`]+)`/g, '<code style="background:#f3f4f6;padding:2px 4px;border-radius:4px">$1</code>')
-  // bold & italic
   text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
   text = text.replace(/\*(.*?)\*/g, '<em>$1</em>')
-  // unordered lists
   text = text.replace(/^(?:-\s+.+\n?)+/gm, (block) => {
     const items = block
       .trim()
@@ -108,9 +70,7 @@ function toHtml(md: string) {
       .join('')
     return `<ul>${items}</ul>`
   })
-  // paragraphs
   text = text.replace(/^(?!<h\d>|<ul>|<pre|<p>|<\/)(.+)$/gm, '<p>$1</p>')
-  // Restore code blocks
   text = codeBlocks.reduce((acc, html, i) => acc.replaceAll(`__CODE_BLOCK_${i}__`, html), text)
   return text
 }
@@ -154,7 +114,7 @@ function highlightCode(language: string, code: string): string {
       text = text.replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span class="tok-comment">$1</span>')
       text = text.replace(/(&lt;\/?)([a-zA-Z0-9:-]+)([^&]*?)(\s*\/??&gt;)/g, (_m, p1, p2, p3, p4) => {
         const attrs = p3.replace(/([a-zA-Z_:][a-zA-Z0-9:._-]*)(=)("[^"]*"|'[^']*')/g, '<span class="tok-attr">$1</span>$2<span class="tok-string">$3</span>')
-        return `${p1}<span class=\"tok-tag\">${p2}</span>${attrs}${p4}`
+        return `${p1}<span class="tok-tag">${p2}</span>${attrs}${p4}`
       })
       return text
     }
@@ -185,3 +145,5 @@ function highlightCode(language: string, code: string): string {
       return esc
   }
 }
+
+
