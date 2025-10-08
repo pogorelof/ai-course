@@ -47,8 +47,3 @@ npm run dev
 - POST `/courses/topics/{topic_id}/generate` (auth): generates and saves `content` for a topic and returns `{ course_title, course_id, topic_id, content }`
 - GET `/courses/mine` (auth): returns array of the current user's courses, each `{ id, title }`
 - GET `/courses/{course_id}/topics` (auth): returns array of topics for the given course, each `{ id, title, content|null }`
-
-## Notes
-
-- Keep `backend` and `frontend` as separate top-level folders.
-- Commit lockfiles (`backend/requirements.txt`, `frontend/package-lock.json`).
