@@ -3,49 +3,47 @@ import type { AuthState } from '../types/domain'
 
 export function Header({ auth, onLogout }: { auth: AuthState; onLogout: () => void }) {
   return (
-    <header style={{
+    <header className="glass-surface" style={{
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
       padding: '12px 20px',
-      backgroundColor: '#eef1f5',
-      border: '1px solid #e5e7eb',
-      borderRadius: 12,
+      borderRadius: 14,
       margin: '12px 16px',
       position: 'sticky',
       top: 0,
-      zIndex: 10,
-      boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+      zIndex: 10
     }}>
       <Link to="/" style={{
         fontSize: 20,
         fontWeight: 700,
-        color: '#111827',
+        color: '#f8fafc',
         textDecoration: 'none'
       }}>Courses</Link>
       {auth.isAuthenticated ? (
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <span style={{ color: '#4b5563' }}>Привет, {auth.username}</span>
+          <span style={{ color: '#cbd5e1' }}>Привет, {auth.username}</span>
           <button
             onClick={onLogout}
+            className="glass-button"
             style={{
-              padding: '8px 14px',
-              borderRadius: 8,
-              border: '1px solid #ef4444',
-              backgroundColor: '#ef4444',
-              color: '#ffffff',
+              padding: '10px 16px',
+              borderRadius: 10,
+              border: '1px solid rgba(239, 68, 68, 0.45)',
+              background: 'rgba(239, 68, 68, 0.20)',
+              boxShadow: '0 3px 10px rgba(239,68,68,0.14)',
               cursor: 'pointer',
-              transition: 'transform .12s, background-color .12s'
+              transition: 'transform .12s, filter .12s'
             }}
             onMouseEnter={(e) => {
               const btn = e.currentTarget as HTMLButtonElement
-              btn.style.transform = 'scale(1.03)'
-              btn.style.backgroundColor = '#b91c1c'
+              btn.style.transform = 'translateY(-1px)'
+              btn.style.filter = 'brightness(1.1)'
             }}
             onMouseLeave={(e) => {
               const btn = e.currentTarget as HTMLButtonElement
-              btn.style.transform = 'scale(1.0)'
-              btn.style.backgroundColor = '#ef4444'
+              btn.style.transform = 'translateY(0)'
+              btn.style.filter = 'none'
             }}
           >
             Выйти
@@ -55,50 +53,52 @@ export function Header({ auth, onLogout }: { auth: AuthState; onLogout: () => vo
         <nav style={{ display: 'flex', gap: 12 }}>
           <Link
             to="/login"
+            className="glass-button"
             style={{
-              padding: '8px 14px',
-              borderRadius: 8,
-              border: '1px solid #d1d5db',
+              padding: '10px 16px',
+              borderRadius: 10,
+              border: '1px solid rgba(148,163,184,0.35)',
+              background: 'rgba(148,163,184,0.18)',
+              color: '#e5e7eb',
               textDecoration: 'none',
-              color: '#111827',
-              backgroundColor: '#ffffff',
               display: 'inline-block',
               cursor: 'pointer',
-              transition: 'transform .12s, background-color .12s'
+              transition: 'transform .12s, filter .12s'
             }}
             onMouseEnter={(e) => {
               const el = e.currentTarget as HTMLAnchorElement
-              el.style.transform = 'scale(1.03)'
-              el.style.backgroundColor = '#f3f4f6'
+              el.style.transform = 'translateY(-1px)'
+              el.style.filter = 'brightness(1.1)'
             }}
             onMouseLeave={(e) => {
               const el = e.currentTarget as HTMLAnchorElement
-              el.style.transform = 'scale(1.0)'
-              el.style.backgroundColor = '#ffffff'
+              el.style.transform = 'translateY(0)'
+              el.style.filter = 'none'
             }}
           >Вход</Link>
           <Link
             to="/register"
+            className="glass-button"
             style={{
-              padding: '8px 14px',
-              borderRadius: 8,
-              border: '1px solid #2563eb',
-              backgroundColor: '#2563eb',
-              color: '#ffffff',
+              padding: '10px 16px',
+              borderRadius: 10,
+              border: '1px solid rgba(37,99,235,0.45)',
+              background: 'rgba(37,99,235,0.18)',
+              color: '#e5e7eb',
               textDecoration: 'none',
               display: 'inline-block',
               cursor: 'pointer',
-              transition: 'transform .12s, background-color .12s'
+              transition: 'transform .12s, filter .12s'
             }}
             onMouseEnter={(e) => {
               const el = e.currentTarget as HTMLAnchorElement
-              el.style.transform = 'scale(1.03)'
-              el.style.backgroundColor = '#1e40af'
+              el.style.transform = 'translateY(-1px)'
+              el.style.filter = 'brightness(1.1)'
             }}
             onMouseLeave={(e) => {
               const el = e.currentTarget as HTMLAnchorElement
-              el.style.transform = 'scale(1.0)'
-              el.style.backgroundColor = '#2563eb'
+              el.style.transform = 'translateY(0)'
+              el.style.filter = 'none'
             }}
           >Регистрация</Link>
         </nav>

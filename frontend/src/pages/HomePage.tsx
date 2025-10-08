@@ -34,26 +34,27 @@ export function HomePage() {
         {token && (
           <Link
             to="/new"
+            className="glass-button"
             style={{
-              padding: '8px 14px',
-              borderRadius: 8,
-              border: '1px solid #2563eb',
-              background: '#2563eb',
-              color: '#fff',
+              padding: '10px 16px',
+              borderRadius: 10,
+              border: '1px solid rgba(37,99,235,0.45)',
+              background: 'rgba(37,99,235,0.18)',
+              color: '#e5e7eb',
               textDecoration: 'none',
               display: 'inline-block',
               cursor: 'pointer',
-              transition: 'transform .12s, background .12s'
+              transition: 'transform .12s, filter .12s'
             }}
             onMouseEnter={(e) => {
               const el = e.currentTarget as HTMLAnchorElement
-              el.style.transform = 'scale(1.03)'
-              el.style.background = '#1e40af'
+              el.style.transform = 'translateY(-1px)'
+              el.style.filter = 'brightness(1.1)'
             }}
             onMouseLeave={(e) => {
               const el = e.currentTarget as HTMLAnchorElement
-              el.style.transform = 'scale(1.0)'
-              el.style.background = '#2563eb'
+              el.style.transform = 'translateY(0)'
+              el.style.filter = 'none'
             }}
           >
             Создать курс
@@ -65,12 +66,12 @@ export function HomePage() {
         <div>
           {loading && <p>Загрузка...</p>}
           {error && <p style={{ color: '#b91c1c' }}>{error}</p>}
-          <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 8 }}>
+          <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 12 }}>
             {courses.map((c) => (
-              <li key={c.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <li key={c.id} className="glass-surface" style={{ borderRadius: 14, padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>{c.title}</span>
                 <Link to={`/courses/${c.id}`} style={{ textDecoration: 'none' }}>
-                  <button style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #2563eb', background: '#2563eb', color: '#fff', cursor: 'pointer', transition: 'transform .12s, background .12s' }} onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.03)'; (e.currentTarget as HTMLButtonElement).style.background = '#1e40af' }} onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.0)'; (e.currentTarget as HTMLButtonElement).style.background = '#2563eb' }}>Открыть</button>
+                  <button className="glass-button" style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(37,99,235,0.4)', cursor: 'pointer', transition: 'transform .12s' }} onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.03)' }} onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.0)' }}>Открыть</button>
                 </Link>
               </li>
             ))}

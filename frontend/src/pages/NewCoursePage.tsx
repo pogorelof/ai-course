@@ -36,16 +36,16 @@ export function NewCoursePage() {
       <h1 style={{ fontSize: 28, marginBottom: 12 }}>Новый курс</h1>
       {!createdCourseId ? (
         <div style={{ display: 'grid', placeItems: 'center', minHeight: '60vh' }}>
-          <div style={{ width: '100%', maxWidth: 720 }}>
+          <div className="glass-surface" style={{ width: '100%', maxWidth: 720, borderRadius: 16, padding: 16 }}>
             <form style={{ display: 'grid', gap: 12 }} onSubmit={submit}>
               {error && <div style={{ color: '#b91c1c' }}>{error}</div>}
               <label style={{ display: 'grid', gap: 6 }}>
                 <span style={{ fontSize: 16, fontWeight: 600 }}>Тема курса</span>
-                <input value={title} onChange={(e) => setTitle(e.target.value)} required style={{ padding: '12px 14px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', fontSize: 16 }} />
+                <input value={title} onChange={(e) => setTitle(e.target.value)} required className="glass-input" style={{ padding: '12px 14px', borderRadius: 10, fontSize: 16 }} />
               </label>
               <label style={{ display: 'grid', gap: 6 }}>
                 <span style={{ fontSize: 16, fontWeight: 600 }}>Ваши пожелания</span>
-                <textarea value={wishes} onChange={(e) => setWishes(e.target.value)} rows={6} required style={{ padding: '12px 14px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', resize: 'none', fontSize: 16, lineHeight: 1.5 }} />
+                <textarea value={wishes} onChange={(e) => setWishes(e.target.value)} rows={6} required className="glass-input" style={{ padding: '12px 14px', borderRadius: 10, resize: 'none', fontSize: 16, lineHeight: 1.5 }} />
               </label>
               {/* Gradient hover animation keyframes */}
               <style>{`@keyframes gradientShift {0%{background-position:0% 50%}100%{background-position:100% 50%}}`}</style>

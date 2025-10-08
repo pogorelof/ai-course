@@ -34,12 +34,12 @@ export function CoursePage() {
       <h1 style={{ fontSize: 28, marginBottom: 12 }}>Темы курса</h1>
       {loading && <LoadingPulse />}
       {error && <p style={{ color: '#b91c1c' }}>{error}</p>}
-      <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 8 }}>
+      <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 12 }}>
         {topics.map(t => (
-          <li key={t.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <li key={t.id} className="glass-surface" style={{ borderRadius: 14, padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>{t.title}</span>
             <Link to={`/topics/${t.id}`} style={{ textDecoration: 'none' }}>
-              <button style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #2563eb', background: '#2563eb', color: '#fff', cursor: 'pointer', transition: 'transform .12s, background .12s' }} onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.03)'; (e.currentTarget as HTMLButtonElement).style.background = '#1e40af' }} onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.0)'; (e.currentTarget as HTMLButtonElement).style.background = '#2563eb' }}>Открыть</button>
+              <button className="glass-button" style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(37,99,235,0.4)', cursor: 'pointer', transition: 'transform .12s' }} onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.03)' }} onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.0)' }}>Открыть</button>
             </Link>
           </li>
         ))}

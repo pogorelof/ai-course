@@ -30,7 +30,7 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, username: stri
       <div style={{ display: 'grid', placeItems: 'center', minHeight: '60vh' }}>
         <div style={{ width: '100%', maxWidth: 420 }}>
           <h1 style={{ fontSize: 28, marginBottom: 16, textAlign: 'center' }}>Вход</h1>
-          <form style={{ display: 'grid', gap: 12 }} onSubmit={handleSubmit}>
+          <form className="glass-surface" style={{ display: 'grid', gap: 12, padding: 16, borderRadius: 16 }} onSubmit={handleSubmit}>
             {error && (
               <div style={{
                 background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca',
@@ -46,7 +46,8 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, username: stri
                 placeholder="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff' }}
+                className="glass-input"
+                style={{ padding: '12px 14px', borderRadius: 10, fontSize: 16 }}
                 required
               />
             </label>
@@ -57,34 +58,36 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, username: stri
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff' }}
+                className="glass-input"
+                style={{ padding: '12px 14px', borderRadius: 10, fontSize: 16 }}
                 required
               />
             </label>
             <button
               type="submit"
               disabled={loading}
+              className="glass-button"
               style={{
                 padding: '12px 16px',
-                borderRadius: 8,
-                border: '1px solid #2563eb',
-                background: '#2563eb',
-                color: '#fff',
+                borderRadius: 10,
+                border: '1px solid rgba(37,99,235,0.45)',
+                background: 'rgba(37,99,235,0.18)',
+                color: '#e5e7eb',
                 width: '100%',
                 opacity: loading ? 0.8 : 1,
                 cursor: loading ? 'not-allowed' : 'pointer',
-                transition: 'transform .12s, background .12s'
+                transition: 'transform .12s, filter .12s'
               }}
               onMouseEnter={(e) => {
                 if (loading) return
                 const btn = e.currentTarget as HTMLButtonElement
-                btn.style.transform = 'scale(1.02)'
-                btn.style.background = '#1e40af'
+                btn.style.transform = 'translateY(-1px)'
+                btn.style.filter = 'brightness(1.1)'
               }}
               onMouseLeave={(e) => {
                 const btn = e.currentTarget as HTMLButtonElement
-                btn.style.transform = 'scale(1.0)'
-                btn.style.background = '#2563eb'
+                btn.style.transform = 'translateY(0)'
+                btn.style.filter = 'none'
               }}
             >
               {loading ? 'Входим...' : 'Войти'}

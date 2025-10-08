@@ -22,6 +22,9 @@ export function TopicPage() {
       if (!token || !topicId) return
       setLoading(true)
       setError(null)
+      setContent(null)
+      setTitle(null)
+      setCourseId(null)
       try {
         const data: GeneratedTopic = await CoursesAPI.generateTopic(topicId)
         setTitle(data.course_title)
@@ -42,17 +45,17 @@ export function TopicPage() {
     <PageContainer>
       <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', overflow: 'hidden' }}>
         {sidebarOpen && (
-          <aside style={{ width: 260, flex: '0 0 260px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: 12, height: 'fit-content', position: 'sticky', top: 16 }}>
+          <aside className="glass-surface" style={{ width: 260, flex: '0 0 260px', borderRadius: 14, padding: 12, height: 'fit-content', position: 'sticky', top: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <strong style={{ fontSize: 14, color: '#374151' }}>Темы курса</strong>
-              <button onClick={() => setSidebarOpen(false)} style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}>Скрыть</button>
+              <strong style={{ fontSize: 14, color: '#e5e7eb' }}>Темы курса</strong>
+              <button className="glass-button" onClick={() => setSidebarOpen(false)} style={{ padding: '6px 10px', borderRadius: 10, border: '1px solid rgba(148,163,184,0.35)', background: 'rgba(148,163,184,0.18)', cursor: 'pointer', transition: 'transform .12s' }} onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)' }} onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)' }}>Скрыть</button>
             </div>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 6 }}>
               {topics.map(t => (
-                <li key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #f3f4f6', borderRadius: 8, padding: '8px 10px', background: String(t.id) === topicId ? '#eef2ff' : '#fff' }}>
+                <li key={t.id} className="glass-surface" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: 12, padding: '8px 10px', background: String(t.id) === topicId ? 'rgba(99,102,241,0.18)' : undefined }}>
                   <span style={{ fontSize: 14 }}>{t.title}</span>
                   <Link to={`/topics/${t.id}`} style={{ textDecoration: 'none' }}>
-                    <button style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #2563eb', background: '#2563eb', color: '#fff', cursor: 'pointer', transition: 'transform .12s, background .12s' }} onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.03)'; (e.currentTarget as HTMLButtonElement).style.background = '#1e40af' }} onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.0)'; (e.currentTarget as HTMLButtonElement).style.background = '#2563eb' }}>Открыть</button>
+                    <button className="glass-button" style={{ padding: '6px 10px', borderRadius: 10, border: '1px solid rgba(37,99,235,0.4)', cursor: 'pointer', transition: 'transform .12s' }} onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.03)' }} onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.0)' }}>Открыть</button>
                   </Link>
                 </li>
               ))}
@@ -61,34 +64,42 @@ export function TopicPage() {
         )}
 
         <div style={{ flex: '1 1 auto', minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <h1 style={{ fontSize: 24, marginBottom: 12 }}>{title ? `Курс: ${title}` : 'Загрузка темы...'}</h1>
-            <div>
-              {!sidebarOpen && (
-                <button onClick={() => setSidebarOpen(true)} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}>Показать темы</button>
-              )}
-              {courseId && (
-                <Link to={`/courses/${courseId}`} style={{ marginLeft: 8, textDecoration: 'none' }}>
-                  <button style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #2563eb', background: '#2563eb', color: '#fff', cursor: 'pointer', transition: 'transform .12s, background .12s' }} onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.03)'; (e.currentTarget as HTMLButtonElement).style.background = '#1e40af' }} onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.0)'; (e.currentTarget as HTMLButtonElement).style.background = '#2563eb' }}>Все темы</button>
-                </Link>
-              )}
-            </div>
-          </div>
-          {loading && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {loading ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 8 }}>
               <LoadingPulse />
               <span>Генерируем контент...</span>
             </div>
+          ) : (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h1 style={{ fontSize: 24, marginBottom: 12, color: '#f1f5f9' }}>{title ? `Курс: ${title}` : ''}</h1>
+                <div>
+                  {!sidebarOpen && (
+                    <button className="glass-button" onClick={() => setSidebarOpen(true)} style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(148,163,184,0.35)', background: 'rgba(148,163,184,0.18)', cursor: 'pointer' }}>Показать темы</button>
+                  )}
+                  {courseId && (
+                    <Link to={`/courses/${courseId}`} style={{ marginLeft: 8, textDecoration: 'none' }}>
+                      <button className="glass-button" style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(37,99,235,0.4)', cursor: 'pointer', transition: 'transform .12s' }} onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)' }} onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)' }}>Все темы</button>
+                    </Link>
+                  )}
+                </div>
+              </div>
+              {error && <p style={{ color: '#b91c1c' }}>{error}</p>}
+              {content && (
+                <div className="glass-surface" style={{ borderRadius: 16, padding: 12 }}>
+                  <MarkdownRenderer markdown={content} />
+                </div>
+              )}
+            </>
           )}
-          {error && <p style={{ color: '#b91c1c' }}>{error}</p>}
-          {content && <MarkdownRenderer markdown={content} />}
         </div>
       </div>
       {!sidebarOpen && (
         <button
           onClick={() => setSidebarOpen(true)}
           title="Показать темы"
-          style={{ position: 'fixed', left: 12, top: 120, zIndex: 20, padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db', background: '#ffffff', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.08)' }}
+          className="glass-button"
+          style={{ position: 'fixed', left: 16, top: '50%', transform: 'translateY(-50%)', zIndex: 30, padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(148,163,184,0.35)', background: 'rgba(148,163,184,0.18)', cursor: 'pointer' }}
         >Темы</button>
       )}
     </PageContainer>
