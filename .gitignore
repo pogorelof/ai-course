@@ -1,0 +1,49 @@
+# macOS
+.DS_Store
+
+# Environment
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+.venv/
+/venv/
+/.venv/
+pip-wheel-metadata/
+
+# Testing / Coverage
+.pytest_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Databases
+/backend/app.db
+/backend/*.db
+/backend/*.sqlite3
+
+# Node / Vite
+/frontend/node_modules/
+/frontend/dist/
+/frontend/.vite/
+/frontend/.eslintcache
+/frontend/.turbo/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
