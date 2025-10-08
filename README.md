@@ -22,11 +22,13 @@ Environment file (`backend/.env`):
 ```
 SECRET_KEY=change_me_in_production
 OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o-mini
+OPENAI_MODEL=gpt-5-nano
 # Optional
 # LANGCHAIN_TRACING_V2=true
-# LANGCHAIN_API_KEY=ls_...
 ```
+`OPENAI_MODEL` - Models used for testing: `gpt-5` and `gpt-5-nano`.
+
+`SECRET_KEY` - for JWT auth. You can leave `change_me_in_production` for tests.
 
 SQLite database `backend/app.db` is created automatically on startup.
 
