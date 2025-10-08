@@ -1,7 +1,54 @@
+import { useEffect, useRef } from 'react'
+import hljs from 'highlight.js/lib/core'
+import python from 'highlight.js/lib/languages/python'
+import javascript from 'highlight.js/lib/languages/javascript'
+import typescript from 'highlight.js/lib/languages/typescript'
+import java from 'highlight.js/lib/languages/java'
+import bash from 'highlight.js/lib/languages/bash'
+import json from 'highlight.js/lib/languages/json'
+import xml from 'highlight.js/lib/languages/xml'
+import sql from 'highlight.js/lib/languages/sql'
+import yaml from 'highlight.js/lib/languages/yaml'
+
+// Register common languages once (module scope)
+hljs.registerLanguage('python', python)
+hljs.registerLanguage('py', python)
+hljs.registerLanguage('javascript', javascript)
+hljs.registerLanguage('js', javascript)
+hljs.registerLanguage('typescript', typescript)
+hljs.registerLanguage('ts', typescript)
+hljs.registerLanguage('java', java)
+hljs.registerLanguage('bash', bash)
+hljs.registerLanguage('sh', bash)
+hljs.registerLanguage('shell', bash)
+hljs.registerLanguage('json', json)
+hljs.registerLanguage('xml', xml)
+hljs.registerLanguage('html', xml)
+hljs.registerLanguage('sql', sql)
+hljs.registerLanguage('yaml', yaml)
+
 export function MarkdownRenderer({ markdown }: { markdown: string }) {
   const html = toHtml(markdown)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!containerRef.current) return
+    const run = () => {
+      if (!containerRef.current) return
+      const codeBlocks = containerRef.current.querySelectorAll('pre code')
+      codeBlocks.forEach(el => {
+        const node = el as HTMLElement
+        if (node.dataset.highlighted === 'yes') return
+        try { hljs.highlightElement(node) } catch {}
+      })
+    }
+    const raf = requestAnimationFrame(() => setTimeout(run, 0))
+    return () => cancelAnimationFrame(raf)
+  }, [html])
+
   return (
     <div
+      ref={containerRef}
       className="prose"
       style={{ background: 'transparent', borderRadius: 10, padding: 4, textAlign: 'left', lineHeight: 1.6, color: '#e5e7eb' }}
     >
@@ -59,8 +106,9 @@ function toHtml(md: string) {
       .replace(/\n{2,}/g, '\n')
       .replace(/^\n+|\n+$/g, '')
     const highlighted = highlightCode(language, inner)
-    const badge = language ? `<span class="lang-badge">${language}</span>` : ''
-    const html = `<pre class="md-code">${badge}<code>${highlighted}</code></pre>`
+    const badge = language ? `<span class=\"lang-badge\">${language}</span>` : ''
+    const langClass = language ? ` language-${language}` : ''
+    const html = `<pre class=\"md-code\">${badge}<code class=\"hljs${langClass}\">${highlighted}</code></pre>`
     const token = `__CODE_BLOCK_${codeBlocks.length}__`
     codeBlocks.push(html)
     return token
@@ -92,74 +140,9 @@ function toHtml(md: string) {
 }
 
 function highlightCode(language: string, code: string): string {
-  const esc = escapeHtml(code)
-  const apply = (text: string, rules: Array<[RegExp, string]>) => {
-    return rules.reduce((acc, [re, cls]) => acc.replace(re, cls), text)
-  }
-  switch (language) {
-    case 'js': case 'javascript': case 'ts': case 'typescript': {
-      const rules: Array<[RegExp, string]> = [
-        [/\/\/.*$/gm, '<span class="tok-comment">$&</span>'],
-        [/("[^"]*"|'[^']*'|`[^`]*`)/g, '<span class="tok-string">$1</span>'],
-        [/\b(\d+(?:\.\d+)?)\b/g, '<span class="tok-number">$1</span>'],
-        [/\b(const|let|var|function|return|if|else|for|while|class|extends|new|try|catch|finally|throw|import|from|export|default|await|async|switch|case|break|continue|this|super)\b/g, '<span class="tok-keyword">$1</span>']
-      ]
-      return apply(esc, rules)
-    }
-    case 'py': case 'python': {
-      const rules: Array<[RegExp, string]> = [
-        [/#.*$/gm, '<span class="tok-comment">$&</span>'],
-        [/("""[\s\S]*?"""|'''[\s\S]*?'''|"[^"]*"|'[^']*')/g, '<span class="tok-string">$1</span>'],
-        [/\b(\d+(?:\.\d+)?)\b/g, '<span class="tok-number">$1</span>'],
-        [/\b(def|class|return|if|elif|else|for|while|try|except|finally|with|as|import|from|pass|break|continue|lambda|yield|global|nonlocal|assert|raise|in|is|and|or|not)\b/g, '<span class="tok-keyword">$1</span>']
-      ]
-      return apply(esc, rules)
-    }
-    case 'java': {
-      const rules: Array<[RegExp, string]> = [
-        [/\/\/.*$/gm, '<span class="tok-comment">$&</span>'],
-        [/\/\*[\s\S]*?\*\//g, '<span class="tok-comment">$&</span>'],
-        [/("[^"]*")/g, '<span class="tok-string">$1</span>'],
-        [/\b(\d+(?:\.\d+)?)\b/g, '<span class="tok-number">$1</span>'],
-        [/\b(class|interface|enum|public|private|protected|static|final|void|int|long|double|float|boolean|char|new|return|if|else|for|while|try|catch|finally|throw|throws|extends|implements|package|import)\b/g, '<span class="tok-keyword">$1</span>']
-      ]
-      return apply(esc, rules)
-    }
-    case 'xml': case 'html': {
-      let text = esc
-      text = text.replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span class="tok-comment">$1</span>')
-      text = text.replace(/(&lt;\/?)([a-zA-Z0-9:-]+)([^&]*?)(\s*\/??&gt;)/g, (_m, p1, p2, p3, p4) => {
-        const attrs = p3.replace(/([a-zA-Z_:][a-zA-Z0-9:._-]*)(=)("[^"]*"|'[^']*')/g, '<span class="tok-attr">$1</span>$2<span class="tok-string">$3</span>')
-        return `${p1}<span class="tok-tag">${p2}</span>${attrs}${p4}`
-      })
-      return text
-    }
-    case 'json': {
-      let text = esc
-      text = text.replace(/("[^"]*"\s*:)/g, '<span class="tok-attr">$1</span>')
-      text = text.replace(/("[^"]*")/g, '<span class="tok-string">$1</span>')
-      text = text.replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="tok-number">$1</span>')
-      return text
-    }
-    case 'bash': case 'sh': case 'shell': {
-      const rules: Array<[RegExp, string]> = [
-        [/^#.*/gm, '<span class="tok-comment">$&</span>'],
-        [/("[^"]*"|'[^']*')/g, '<span class="tok-string">$1</span>'],
-        [/\b(\d+(?:\.\d+)?)\b/g, '<span class="tok-number">$1</span>']
-      ]
-      return apply(esc, rules)
-    }
-    case 'sql': {
-      const rules: Array<[RegExp, string]> = [
-        [/(--.*$)/gm, '<span class="tok-comment">$1</span>'],
-        [/("[^"]*"|'[^']*')/g, '<span class="tok-string">$1</span>'],
-        [/\b(SELECT|FROM|WHERE|AND|OR|INSERT|INTO|VALUES|UPDATE|SET|DELETE|JOIN|LEFT|RIGHT|INNER|OUTER|ON|GROUP BY|ORDER BY|LIMIT|OFFSET)\b/gi, '<span class="tok-keyword">$1</span>']
-      ]
-      return apply(esc, rules)
-    }
-    default:
-      return esc
-  }
+  // Disable naive regex-based highlighting to avoid corrupting code with class attributes.
+  // Return escaped raw code; visual styling handled by the container.
+  return escapeHtml(code)
 }
 
 

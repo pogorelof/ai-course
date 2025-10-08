@@ -67,3 +67,20 @@ button {
 .glass-input::placeholder {
   color: #94a3b8;
 }
+
+/* Syntax highlighting (hljs) – scoped palettes per theme */
+/* Dark theme */
+body .hljs { background: transparent; color: #e5e7eb; }
+body .hljs-comment, body .hljs-quote { color: #94a3b8; }
+body .hljs-keyword, body .hljs-selector-tag, body .hljs-literal, body .hljs-section, body .hljs-link { color: #93c5fd; }
+body .hljs-string, body .hljs-doctag, body .hljs-addition { color: #86efac; }
+body .hljs-number, body .hljs-template-variable, body .hljs-variable { color: #fca5a5; }
+body .hljs-attribute, body .hljs-attr, body .hljs-name, body .hljs-selector-id, body .hljs-selector-class { color: #fcd34d; }
+
+/* Light overrides */
+body[data-theme="light"] .hljs { color: #0b1220; }
+body[data-theme="light"] .hljs-comment, body[data-theme="light"] .hljs-quote { color: #64748b; }
+body[data-theme="light"] .hljs-keyword, body[data-theme="light"] .hljs-selector-tag, body[data-theme="light"] .hljs-literal, body[data-theme="light"] .hljs-section, body[data-theme="light"] .hljs-link { color: #1d4ed8; }
+body[data-theme="light"] .hljs-string, body[data-theme="light"] .hljs-doctag, body[data-theme="light"] .hljs-addition { color: #15803d; }
+body[data-theme="light"] .hljs-number, body[data-theme="light"] .hljs-template-variable, body[data-theme="light"] .hljs-variable { color: #b91c1c; }
+body[data-theme="light"] .hljs-attribute, body[data-theme="light"] .hljs-attr, body[data-theme="light"] .hljs-name, body[data-theme="light"] .hljs-selector-id, body[data-theme="light"] .hljs-selector-class { color: #b45309; }
