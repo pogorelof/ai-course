@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { CoursesAPI } from '../services/api'
 import type { GeneratedTopic, Topic } from '../types/domain'
@@ -16,6 +16,30 @@ export function TopicPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Subtle random gradient glow background per topic
+  const glowStyle = useMemo(() => {
+    // random seeds based on topicId to keep consistent per topic
+    const seed = Number(topicId || 0)
+    const rnd = (min: number, max: number, s: number) => {
+      const x = Math.sin(s + 1) * 10000
+      return min + (x - Math.floor(x)) * (max - min)
+    }
+    const c1 = 'rgba(236, 72, 153, 0.14)'
+    const c2 = 'rgba(59, 130, 246, 0.14)'
+    const c3 = 'rgba(245, 158, 11, 0.12)'
+    const p1 = `${rnd(5, 85, seed + 1)}% ${rnd(0, 40, seed + 2)}%`
+    const p2 = `${rnd(20, 90, seed + 3)}% ${rnd(50, 100, seed + 4)}%`
+    const p3 = `${rnd(0, 60, seed + 5)}% ${rnd(30, 90, seed + 6)}%`
+    const bg = `radial-gradient(800px 600px at ${p1}, ${c1}, transparent 60%),
+                radial-gradient(700px 500px at ${p2}, ${c2}, transparent 60%),
+                radial-gradient(700px 500px at ${p3}, ${c3}, transparent 60%)`
+    return {
+      background: bg,
+      filter: 'blur(40px) saturate(120%)',
+      opacity: 0.6,
+    } as React.CSSProperties
+  }, [topicId])
 
   useEffect(() => {
     const run = async () => {
@@ -43,7 +67,10 @@ export function TopicPage() {
 
   return (
     <PageContainer>
-      <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', overflow: 'hidden' }}>
+      <div style={{ position: 'relative' }}>
+        <div aria-hidden style={{ position: 'absolute', inset: -120, zIndex: 0, pointerEvents: 'none', ...glowStyle }} />
+      </div>
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: 16, alignItems: 'flex-start', overflow: 'hidden' }}>
         {sidebarOpen && (
           <aside className="glass-surface" style={{ width: 260, flex: '0 0 260px', borderRadius: 14, padding: 12, height: 'fit-content', position: 'sticky', top: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
