@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     LANGCHAIN_TRACING_V2: bool = bool(os.getenv("LANGCHAIN_TRACING_V2", ""))
     LANGCHAIN_API_KEY: Optional[str] = os.getenv("LANGCHAIN_API_KEY")
+    PROXY_URL: Optional[str] = os.getenv("PROXY_URL")
 
     model_config = SettingsConfigDict(env_file=os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".env")), env_file_encoding="utf-8")
 

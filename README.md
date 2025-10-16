@@ -49,3 +49,23 @@ npm run dev
 - POST `/courses/topics/{topic_id}/generate` (auth): generates and saves `content` for a topic and returns `{ course_title, course_id, topic_id, content }`
 - GET `/courses/mine` (auth): returns array of the current user's courses, each `{ id, title }`
 - GET `/courses/{course_id}/topics` (auth): returns array of topics for the given course, each `{ id, title, content|null }`
+
+## Proxy setup (OpenAI via PROXY_URL)
+
+If you need to route OpenAI requests through a proxy, set `PROXY_URL` in `backend/.env`:
+
+```
+PROXY_URL=http://user:pass@host:port
+```
+
+Without auth:
+
+```
+PROXY_URL=http://host:port
+```
+
+Then restart the backend server to apply changes.
+
+Notes:
+- Only HTTP(S) proxies are supported (backend uses `httpx`).
+- The proxy must egress from a country/region supported by OpenAI. Otherwise you may see `unsupported_country_region_territory`.

@@ -4,6 +4,7 @@ import os
 from langchain.schema import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableLambda
 from openai import OpenAI
+import httpx
 
 from ..core.config import settings
 
@@ -11,11 +12,16 @@ from ..core.config import settings
 def _client() -> OpenAI:
     if settings.OPENAI_API_KEY:
         os.environ["OPENAI_API_KEY"] = settings.OPENAI_API_KEY  # nosec
-    for var in ("OPENAI_PROXY", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
-        if os.environ.get(var):
-            os.environ.pop(var, None)
-    os.environ["NO_PROXY"] = "*"
-    return OpenAI()
+    proxies: dict | None = None
+    http_client = None
+    if settings.PROXY_URL:
+        # Route both http and https via a single upstream proxy URL
+        proxies = {
+            "http://": settings.PROXY_URL,
+            "https://": settings.PROXY_URL,
+        }
+        http_client = httpx.Client(proxies=proxies, timeout=60)
+    return OpenAI(http_client=http_client)
 
 
 def generate_course_outline(title: str, wishes: str) -> List[str]:
