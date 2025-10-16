@@ -40,6 +40,42 @@ npm install
 npm run dev
 ```
 
+## Tests
+
+### Backend (pytest)
+
+Tests live in `backend/tests`.
+
+Run all tests:
+
+```bash
+cd backend
+pytest
+```
+
+With coverage:
+
+```bash
+cd backend
+pytest --cov=app --cov-report=term-missing
+```
+
+### Frontend (Vitest + Testing Library)
+
+Run all tests:
+
+```bash
+cd frontend
+npm test
+```
+
+Interactive watch mode:
+
+```bash
+cd frontend
+npx vitest
+```
+
 ## API Endpoints
 
 - POST `/auth/register`: { username, email, password } → User
