@@ -10,6 +10,7 @@ export function NewCoursePage() {
   const navigate = useNavigate()
   const [title, setTitle] = useState('')
   const [wishes, setWishes] = useState('')
+  const [file, setFile] = useState<File | undefined>(undefined)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [topics, setTopics] = useState<Topic[]>([])
@@ -21,7 +22,7 @@ export function NewCoursePage() {
     setLoading(true)
     setError(null)
     try {
-      const data = await CoursesAPI.outline({ title, wishes })
+      const data = await CoursesAPI.outline({ title, wishes, file })
       setCreatedCourseId(data.course_id)
       setTopics(data.topics)
     } catch (e) {
@@ -46,6 +47,10 @@ export function NewCoursePage() {
               <label style={{ display: 'grid', gap: 6 }}>
                 <span style={{ fontSize: 16, fontWeight: 600 }}>Ваши пожелания</span>
                 <textarea value={wishes} onChange={(e) => setWishes(e.target.value)} rows={6} required className="glass-input" style={{ padding: '12px 14px', borderRadius: 10, resize: 'none', fontSize: 16, lineHeight: 1.5 }} />
+              </label>
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span style={{ fontSize: 16, fontWeight: 600 }}>PDF материал (необязательно)</span>
+                <input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0])} className="glass-input" style={{ padding: '12px 14px', borderRadius: 10, fontSize: 16 }} />
               </label>
               {/* Gradient hover animation keyframes */}
               <style>{`@keyframes gradientShift {0%{background-position:0% 50%}100%{background-position:100% 50%}}`}</style>

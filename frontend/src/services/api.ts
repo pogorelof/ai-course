@@ -25,14 +25,16 @@ export async function apiFetch<T>(path: string, options: { method?: HttpMethod; 
   const url = `${API_BASE_URL}${path}`
   const token = getAccessToken()
 
+  const isFormData = body instanceof FormData
+
   const init: RequestInit = {
     method,
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...headers,
       ...(auth && token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: body !== undefined ? (isFormData ? body as BodyInit : JSON.stringify(body)) : undefined,
   }
 
   const res = await fetch(url, init)
@@ -60,8 +62,14 @@ export const CoursesAPI = {
   async myCourses(): Promise<Array<{ id: number; title: string }>> {
     return apiFetch('/courses/mine', { auth: true })
   },
-  async outline(payload: { title: string; wishes: string }): Promise<{ course_id: number; topics: Array<{ id: number; title: string }> }> {
-    return apiFetch('/courses/outline', { method: 'POST', body: payload, auth: true })
+  async outline(payload: { title: string; wishes: string; file?: File }): Promise<{ course_id: number; topics: Array<{ id: number; title: string }> }> {
+    const formData = new FormData()
+    formData.append('title', payload.title)
+    formData.append('wishes', payload.wishes)
+    if (payload.file) {
+      formData.append('file', payload.file)
+    }
+    return apiFetch('/courses/outline', { method: 'POST', body: formData, auth: true })
   },
   async courseTopics(courseId: number | string): Promise<Array<{ id: number; title: string }>> {
     return apiFetch(`/courses/${courseId}/topics`, { auth: true })
@@ -70,5 +78,3 @@ export const CoursesAPI = {
     return apiFetch(`/courses/topics/${topicId}/generate`, { method: 'POST', auth: true })
   },
 }
-
-

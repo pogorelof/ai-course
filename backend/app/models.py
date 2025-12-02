@@ -27,6 +27,7 @@ class Course(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     wishes: Mapped[str] = mapped_column(Text, nullable=False)
+    pdf_path: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     owner: Mapped[User] = relationship("User", back_populates="courses")
     topics: Mapped[list["CourseTopic"]] = relationship("CourseTopic", back_populates="course", cascade="all, delete-orphan")
