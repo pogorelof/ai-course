@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import List, Optional
 
 
@@ -52,6 +52,9 @@ class TopicOut(BaseModel):
     id: int
     title: str
     content: Optional[str]
+    last_score_percent: Optional[int] = None
+    has_passed_quiz: bool = False
+    has_attempts: bool = False
 
     class Config:
         from_attributes = True
@@ -68,3 +71,46 @@ class TopicContentResponse(BaseModel):
     topic_id: int
     content: str
 
+
+class QuizQuestionOut(BaseModel):
+    id: int
+    question_text: str
+    options: List[str]
+
+
+class TopicQuizProgressOut(BaseModel):
+    has_attempts: bool
+    last_score_percent: Optional[int] = None
+    attempts_count: int = 0
+
+
+class QuizSubmitAnswerInput(BaseModel):
+    question_id: int
+    selected_option_index: int = Field(ge=0, le=3)
+
+
+class QuizSubmitInput(BaseModel):
+    answers: List[QuizSubmitAnswerInput]
+
+
+class QuizWrongAdviceOut(BaseModel):
+    question_id: int
+    question_text: str
+    selected_option_index: int
+    correct_option_index: int
+    advice: str
+
+
+class QuizResultOut(BaseModel):
+    score_percent: int
+    total_questions: int
+    correct_answers: int
+    wrong_advices: List[QuizWrongAdviceOut]
+    question_results: List[QuizWrongAdviceOut]
+
+
+class TopicQuizOut(BaseModel):
+    topic_id: int
+    questions: List[QuizQuestionOut]
+    progress: TopicQuizProgressOut
+    last_result: Optional[QuizResultOut] = None

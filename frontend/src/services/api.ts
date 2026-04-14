@@ -71,10 +71,96 @@ export const CoursesAPI = {
     }
     return apiFetch('/courses/outline', { method: 'POST', body: formData, auth: true })
   },
-  async courseTopics(courseId: number | string): Promise<Array<{ id: number; title: string }>> {
+  async courseTopics(courseId: number | string): Promise<Array<{
+    id: number
+    title: string
+    last_score_percent?: number | null
+    has_passed_quiz?: boolean
+    has_attempts?: boolean
+  }>> {
     return apiFetch(`/courses/${courseId}/topics`, { auth: true })
   },
   async generateTopic(topicId: number | string): Promise<{ course_title: string; course_id: number; topic_id: number; content: string }> {
     return apiFetch(`/courses/topics/${topicId}/generate`, { method: 'POST', auth: true })
+  },
+  async topicQuiz(topicId: number | string): Promise<{
+    topic_id: number
+    questions: Array<{ id: number; question_text: string; options: string[] }>
+    progress: { has_attempts: boolean; last_score_percent: number | null; attempts_count: number }
+    last_result?: {
+      score_percent: number
+      total_questions: number
+      correct_answers: number
+      wrong_advices: Array<{
+        question_id: number
+        question_text: string
+        selected_option_index: number
+        correct_option_index: number
+        advice: string
+      }>
+      question_results: Array<{
+        question_id: number
+        question_text: string
+        selected_option_index: number
+        correct_option_index: number
+        advice: string
+      }>
+    } | null
+  }> {
+    return apiFetch(`/courses/topics/${topicId}/quiz`, { auth: true })
+  },
+  async generateTopicQuiz(topicId: number | string): Promise<{
+    topic_id: number
+    questions: Array<{ id: number; question_text: string; options: string[] }>
+    progress: { has_attempts: boolean; last_score_percent: number | null; attempts_count: number }
+    last_result?: {
+      score_percent: number
+      total_questions: number
+      correct_answers: number
+      wrong_advices: Array<{
+        question_id: number
+        question_text: string
+        selected_option_index: number
+        correct_option_index: number
+        advice: string
+      }>
+      question_results: Array<{
+        question_id: number
+        question_text: string
+        selected_option_index: number
+        correct_option_index: number
+        advice: string
+      }>
+    } | null
+  }> {
+    return apiFetch(`/courses/topics/${topicId}/quiz/generate`, { method: 'POST', auth: true })
+  },
+  async submitTopicQuiz(
+    topicId: number | string,
+    answers: Array<{ question_id: number; selected_option_index: number }>
+  ): Promise<{
+    score_percent: number
+    total_questions: number
+    correct_answers: number
+    wrong_advices: Array<{
+      question_id: number
+      question_text: string
+      selected_option_index: number
+      correct_option_index: number
+      advice: string
+    }>
+    question_results: Array<{
+      question_id: number
+      question_text: string
+      selected_option_index: number
+      correct_option_index: number
+      advice: string
+    }>
+  }> {
+    return apiFetch(`/courses/topics/${topicId}/quiz/submit`, {
+      method: 'POST',
+      auth: true,
+      body: { answers },
+    })
   },
 }

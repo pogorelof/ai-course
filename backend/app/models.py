@@ -1,4 +1,6 @@
-from sqlalchemy import Column, Integer, String, UniqueConstraint, ForeignKey, Text
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from typing import Optional
 
@@ -45,4 +47,81 @@ class CourseTopic(Base):
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     course: Mapped[Course] = relationship("Course", back_populates="topics")
+    quiz: Mapped[Optional["TopicQuiz"]] = relationship(
+        "TopicQuiz", back_populates="topic", uselist=False, cascade="all, delete-orphan"
+    )
+
+
+class TopicQuiz(Base):
+    __tablename__ = "topic_quizzes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    topic_id: Mapped[int] = mapped_column(
+        ForeignKey("course_topics.id", ondelete="CASCADE"), nullable=False, unique=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+    topic: Mapped[CourseTopic] = relationship("CourseTopic", back_populates="quiz")
+    questions: Mapped[list["TopicQuizQuestion"]] = relationship(
+        "TopicQuizQuestion", back_populates="quiz", cascade="all, delete-orphan"
+    )
+    attempts: Mapped[list["TopicQuizAttempt"]] = relationship(
+        "TopicQuizAttempt", back_populates="quiz", cascade="all, delete-orphan"
+    )
+
+
+class TopicQuizQuestion(Base):
+    __tablename__ = "topic_quiz_questions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    quiz_id: Mapped[int] = mapped_column(
+        ForeignKey("topic_quizzes.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    question_text: Mapped[str] = mapped_column(Text, nullable=False)
+    option_a: Mapped[str] = mapped_column(String(500), nullable=False)
+    option_b: Mapped[str] = mapped_column(String(500), nullable=False)
+    option_c: Mapped[str] = mapped_column(String(500), nullable=False)
+    option_d: Mapped[str] = mapped_column(String(500), nullable=False)
+    correct_option_index: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    quiz: Mapped[TopicQuiz] = relationship("TopicQuiz", back_populates="questions")
+    answers: Mapped[list["TopicQuizAttemptAnswer"]] = relationship(
+        "TopicQuizAttemptAnswer", back_populates="question", cascade="all, delete-orphan"
+    )
+
+
+class TopicQuizAttempt(Base):
+    __tablename__ = "topic_quiz_attempts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    quiz_id: Mapped[int] = mapped_column(
+        ForeignKey("topic_quizzes.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    score_percent: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+    quiz: Mapped[TopicQuiz] = relationship("TopicQuiz", back_populates="attempts")
+    answers: Mapped[list["TopicQuizAttemptAnswer"]] = relationship(
+        "TopicQuizAttemptAnswer", back_populates="attempt", cascade="all, delete-orphan"
+    )
+
+
+class TopicQuizAttemptAnswer(Base):
+    __tablename__ = "topic_quiz_attempt_answers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    attempt_id: Mapped[int] = mapped_column(
+        ForeignKey("topic_quiz_attempts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    question_id: Mapped[int] = mapped_column(
+        ForeignKey("topic_quiz_questions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    selected_option_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_correct: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    advice: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    attempt: Mapped[TopicQuizAttempt] = relationship("TopicQuizAttempt", back_populates="answers")
+    question: Mapped[TopicQuizQuestion] = relationship("TopicQuizQuestion", back_populates="answers")
 

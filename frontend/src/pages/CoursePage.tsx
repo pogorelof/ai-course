@@ -29,6 +29,12 @@ export function CoursePage() {
     run()
   }, [token, courseId])
 
+  const getScoreClassName = (score: number) => {
+    if (score > 60) return 'topic-score topic-score--green'
+    if (score >= 40) return 'topic-score topic-score--orange'
+    return 'topic-score topic-score--red'
+  }
+
   return (
     <PageContainer>
       <div className="section-stack">
@@ -49,7 +55,16 @@ export function CoursePage() {
         <ul className="list-stack">
           {topics.map(t => (
             <li key={t.id} className="list-row">
-              <span style={{ fontWeight: 600, lineHeight: 1.24 }}>{t.title}</span>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <span style={{ fontWeight: 600, lineHeight: 1.24 }}>{t.title}</span>
+                {!t.has_attempts ? (
+                  <span className="topic-score topic-score--red">Тест не пройден</span>
+                ) : (
+                  <span className={getScoreClassName(t.last_score_percent ?? 0)}>
+                    {t.has_passed_quiz ? `Тест: ${t.last_score_percent}%` : `Тест не пройден: ${t.last_score_percent}%`}
+                  </span>
+                )}
+              </div>
               <Link to={`/topics/${t.id}`} className="btn btn-pill">
                 Открыть
               </Link>

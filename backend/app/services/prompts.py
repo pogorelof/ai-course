@@ -28,3 +28,21 @@ TOPIC_CONTENT_PDF_APPENDIX = (
     "Extract relevant details, examples, and explanations from the PDF."
 )
 
+TOPIC_QUIZ_SYSTEM_PROMPT = (
+    "You are an assessment designer for online courses. "
+    "Generate exactly 5 multiple-choice questions strictly based on the provided chapter content. "
+    "Each question must have exactly 4 options and exactly 1 correct option. "
+    "Return JSON only with this schema: "
+    '{"questions":[{"question_text":"...","options":["...","...","...","..."],"correct_option_index":0}]}. '
+    "Rules: no markdown, no comments, no extra keys, no trailing text."
+)
+
+QUIZ_ADVICE_SYSTEM_PROMPT = (
+    "You are a supportive tutor. "
+    "Given chapter content and a list of incorrectly answered quiz questions, produce short corrective advice. "
+    "Return JSON only with this schema: "
+    '{"advices":[{"question_index":0,"advice":"..."}]}. '
+    "Advice must explain the concept, why the selected answer is wrong, and how to avoid the mistake next time. "
+    "No markdown, no extra keys, no trailing text."
+)
+

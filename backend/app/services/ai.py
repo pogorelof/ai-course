@@ -1,8 +1,7 @@
-from typing import List, Optional
+import json
+from typing import Dict, List, Optional
 import os
 
-from langchain.schema import HumanMessage, SystemMessage
-from langchain_core.runnables import RunnableLambda
 from openai import OpenAI
 from openai import OpenAIError
 import httpx
@@ -12,8 +11,10 @@ from ..core.config import settings
 from .prompts import (
     COURSE_OUTLINE_PDF_APPENDIX,
     COURSE_OUTLINE_SYSTEM_PROMPT,
+    QUIZ_ADVICE_SYSTEM_PROMPT,
     TOPIC_CONTENT_PDF_APPENDIX,
     TOPIC_CONTENT_SYSTEM_PROMPT,
+    TOPIC_QUIZ_SYSTEM_PROMPT,
 )
 
 
@@ -91,3 +92,96 @@ def generate_topic_content(course_title: str, wishes: str, topic_title: str, pdf
         ],
     )
     return (resp.choices[0].message.content or "").strip()
+
+
+def _parse_json_response(text: str, context_name: str) -> dict:
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise OpenAIError(f"{context_name}: model returned invalid JSON") from exc
+    if not isinstance(data, dict):
+        raise OpenAIError(f"{context_name}: model returned non-object JSON")
+    return data
+
+
+def generate_topic_quiz(course_title: str, topic_title: str, topic_content: str) -> List[dict]:
+    user_content = (
+        f"Course: {course_title}\n"
+        f"Topic: {topic_title}\n"
+        f"Chapter content:\n{topic_content[:50000]}\n\n"
+        "Generate quiz now."
+    )
+
+    client = _client()
+    resp = client.chat.completions.create(
+        model=settings.OPENAI_MODEL,
+        messages=[
+            {"role": "system", "content": TOPIC_QUIZ_SYSTEM_PROMPT},
+            {"role": "user", "content": user_content},
+        ],
+        response_format={"type": "json_object"},
+    )
+    text = (resp.choices[0].message.content or "").strip()
+    data = _parse_json_response(text, "generate_topic_quiz")
+    raw_questions = data.get("questions")
+    if not isinstance(raw_questions, list) or len(raw_questions) != 5:
+        raise OpenAIError("generate_topic_quiz: expected exactly 5 questions")
+
+    normalized: List[dict] = []
+    for item in raw_questions:
+        if not isinstance(item, dict):
+            raise OpenAIError("generate_topic_quiz: invalid question structure")
+        question_text = str(item.get("question_text", "")).strip()
+        options = item.get("options")
+        correct_option_index = item.get("correct_option_index")
+        if not question_text:
+            raise OpenAIError("generate_topic_quiz: empty question text")
+        if not isinstance(options, list) or len(options) != 4:
+            raise OpenAIError("generate_topic_quiz: each question must have 4 options")
+        normalized_options = [str(opt).strip() for opt in options]
+        if any(not opt for opt in normalized_options):
+            raise OpenAIError("generate_topic_quiz: empty option found")
+        if not isinstance(correct_option_index, int) or correct_option_index < 0 or correct_option_index > 3:
+            raise OpenAIError("generate_topic_quiz: invalid correct_option_index")
+        normalized.append(
+            {
+                "question_text": question_text,
+                "options": normalized_options,
+                "correct_option_index": correct_option_index,
+            }
+        )
+    return normalized
+
+
+def generate_quiz_advice(topic_content: str, wrong_answers_payload: List[dict]) -> Dict[int, str]:
+    if not wrong_answers_payload:
+        return {}
+
+    user_content = (
+        f"Chapter content:\n{topic_content[:50000]}\n\n"
+        f"Wrong answers payload:\n{json.dumps(wrong_answers_payload, ensure_ascii=False)}"
+    )
+    client = _client()
+    resp = client.chat.completions.create(
+        model=settings.OPENAI_MODEL,
+        messages=[
+            {"role": "system", "content": QUIZ_ADVICE_SYSTEM_PROMPT},
+            {"role": "user", "content": user_content},
+        ],
+        response_format={"type": "json_object"},
+    )
+    text = (resp.choices[0].message.content or "").strip()
+    data = _parse_json_response(text, "generate_quiz_advice")
+    raw_advices = data.get("advices")
+    if not isinstance(raw_advices, list):
+        raise OpenAIError("generate_quiz_advice: expected advices list")
+
+    result: Dict[int, str] = {}
+    for item in raw_advices:
+        if not isinstance(item, dict):
+            continue
+        question_index = item.get("question_index")
+        advice = str(item.get("advice", "")).strip()
+        if isinstance(question_index, int) and advice:
+            result[question_index] = advice
+    return result
