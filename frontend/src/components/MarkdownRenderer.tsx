@@ -75,6 +75,29 @@ export function MarkdownRenderer({ markdown }: { markdown: string }) {
         .prose ul { list-style: disc; list-style-position: outside; }
         .prose li { margin: 0.2em 0; }
         .prose a { color: #0066cc; }
+        .prose .md-table-wrap {
+          width: 100%;
+          overflow-x: auto;
+          margin: 14px 0;
+        }
+        .prose table {
+          width: 100%;
+          border-collapse: collapse;
+          min-width: 520px;
+          font-size: 16px;
+          line-height: 1.4;
+          text-indent: 0;
+        }
+        .prose th, .prose td {
+          border: 1px solid rgba(0, 0, 0, 0.12);
+          padding: 10px 12px;
+          vertical-align: top;
+          text-align: left;
+        }
+        .prose thead th {
+          background: #f5f7fa;
+          font-weight: 600;
+        }
         .prose code { background: rgba(0, 0, 0, 0.06); padding: 2px 6px; border-radius: 5px; }
         .prose pre, .prose .md-code {
           margin: 10px 0;
@@ -137,6 +160,7 @@ function toHtml(md: string) {
   text = text.replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,0.06);color:#1d1d1f;padding:2px 6px;border-radius:5px">$1</code>')
   text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
   text = text.replace(/\*(.*?)\*/g, '<em>$1</em>')
+  text = renderTables(text)
   text = text.replace(/^(?:-\s+.+\n?)+/gm, (block) => {
     const items = block
       .trim()
@@ -147,9 +171,60 @@ function toHtml(md: string) {
       .join('')
     return `<ul>${items}</ul>`
   })
-  text = text.replace(/^(?!<h\d>|<ul>|<pre|<p>|<\/)(.+)$/gm, '<p>$1</p>')
+  text = text.replace(/^(?!<h\d>|<ul>|<pre|<p>|<div|<table|<thead|<tbody|<tr|<th|<td|<\/)(.+)$/gm, '<p>$1</p>')
   text = codeBlocks.reduce((acc, html, i) => acc.replaceAll(`__CODE_BLOCK_${i}__`, html), text)
   return text
+}
+
+function renderTables(text: string): string {
+  const lines = text.split('\n')
+  const out: string[] = []
+  let i = 0
+
+  while (i < lines.length) {
+    if (
+      i + 1 < lines.length &&
+      isTableRow(lines[i]) &&
+      isTableSeparator(lines[i + 1])
+    ) {
+      const headerCells = parseTableCells(lines[i])
+      const bodyRows: string[][] = []
+      i += 2
+      while (i < lines.length && isTableRow(lines[i])) {
+        bodyRows.push(parseTableCells(lines[i]))
+        i += 1
+      }
+
+      const headerHtml = `<tr>${headerCells.map(cell => `<th>${cell}</th>`).join('')}</tr>`
+      const bodyHtml = bodyRows
+        .map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`)
+        .join('')
+      out.push(`<div class="md-table-wrap"><table><thead>${headerHtml}</thead><tbody>${bodyHtml}</tbody></table></div>`)
+      continue
+    }
+
+    out.push(lines[i])
+    i += 1
+  }
+
+  return out.join('\n')
+}
+
+function isTableRow(line: string): boolean {
+  const trimmed = line.trim()
+  return trimmed.length > 0 && trimmed.includes('|')
+}
+
+function isTableSeparator(line: string): boolean {
+  const trimmed = line.trim()
+  if (!trimmed.includes('|')) return false
+  const cells = parseTableCells(trimmed)
+  return cells.length > 0 && cells.every(cell => /^:?-{3,}:?$/.test(cell.trim()))
+}
+
+function parseTableCells(line: string): string[] {
+  const normalized = line.trim().replace(/^\|/, '').replace(/\|$/, '')
+  return normalized.split('|').map(cell => cell.trim())
 }
 
 function highlightCode(_language: string, code: string): string {

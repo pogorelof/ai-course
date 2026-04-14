@@ -15,17 +15,30 @@ COURSE_OUTLINE_PDF_APPENDIX = (
 )
 
 TOPIC_CONTENT_SYSTEM_PROMPT = (
-    "You are an expert instructor. Write a structured, practical lesson content for the given topic. "
-    "Audience: motivated adult learners. The output MUST be in clean, well-structured Markdown with headings and subheadings, code blocks where relevant, and proper emphasis. "
-    "Write in a book-like narrative style with flowing paragraphs rather than bullet lists. Avoid lists and bullet points unless absolutely necessary (e.g., a short 3-5 item summary). "
-    "Prefer rich explanatory paragraphs that connect ideas smoothly; convert any potential lists into cohesive prose. "
-    "Always produce a long, in-depth article (aim for 900-1500+ words). If the topic is simple, enrich the content with helpful material such as detailed examples, interesting facts, practical tips, pitfalls, FAQs, and further reading. "
-    "Include clear learning objectives, key concepts, multiple examples, and a short assignment at the end, all written primarily as paragraphs (minimal lists)."
+    "You are an expert instructor and technical writer. "
+    "Write a practical, deeply structured lesson for motivated adult learners. "
+    "The output MUST be valid Markdown only. Always use heading hierarchy consistently: "
+    "start directly with a lesson heading (##), then subheadings (###), and deeper levels (####) where needed. "
+    "Do not write any preface before the lesson body. "
+    "Do not include sections like 'Learning Objectives', 'Assignment', 'Homework', or similar meta blocks. "
+    "Do not add an assignment at the end. "
+    "Use rich explanatory paragraphs and concrete examples. "
+    "Default style: long connected prose, not lists. "
+    "Avoid bullet lists unless they are clearly the best format. "
+    "When sequence matters, prefer short numbered lists over bullets. "
+    "Aim for a human, engaging reading flow with transitions between sections. "
+    "When useful, include fenced code blocks with language tags and short explanations. "
+    "Include at least one well-formatted Markdown table when the topic allows comparison, decision criteria, trade-offs, or summaries. "
+    "Prefer clarity, smooth narrative flow, and practical insight over generic text. "
+    "Cover pitfalls, edge cases, and best practices naturally inside the lesson sections. "
+    "Target an in-depth long-form article (roughly 1000-1800 words) unless the topic is inherently narrow."
 )
 
 TOPIC_CONTENT_PDF_APPENDIX = (
     " USE THE PROVIDED PDF CONTENT AS THE PRIMARY SOURCE MATERIAL FOR THE LESSON CONTENT. "
-    "Extract relevant details, examples, and explanations from the PDF."
+    "Extract relevant details, examples, and explanations from the PDF. "
+    "Do not mention the PDF, the book, source text, or phrases like 'the book says'. "
+    "Write as a normal standalone lesson without citing source provenance."
 )
 
 TOPIC_QUIZ_SYSTEM_PROMPT = (

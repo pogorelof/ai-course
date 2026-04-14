@@ -1,6 +1,10 @@
 export type Course = {
   id: number
   title: string
+  wishes?: string | null
+  has_book?: boolean
+  book_name?: string | null
+  book_url?: string | null
 }
 
 export type Topic = {

@@ -1,5 +1,9 @@
 const API_BASE_URL = 'http://localhost:8000'
 
+export function getApiBaseUrl(): string {
+  return API_BASE_URL
+}
+
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
 export function getAccessToken(): string | null {
@@ -59,7 +63,14 @@ export const AuthAPI = {
 }
 
 export const CoursesAPI = {
-  async myCourses(): Promise<Array<{ id: number; title: string }>> {
+  async myCourses(): Promise<Array<{
+    id: number
+    title: string
+    wishes?: string | null
+    has_book?: boolean
+    book_name?: string | null
+    book_url?: string | null
+  }>> {
     return apiFetch('/courses/mine', { auth: true })
   },
   async outline(payload: { title: string; wishes: string; file?: File }): Promise<{ course_id: number; topics: Array<{ id: number; title: string }> }> {
@@ -162,5 +173,24 @@ export const CoursesAPI = {
       auth: true,
       body: { answers },
     })
+  },
+  async deleteCourse(courseId: number | string): Promise<void> {
+    await apiFetch(`/courses/${courseId}`, { method: 'DELETE', auth: true })
+  },
+  async fetchCourseBookBlob(courseId: number | string): Promise<Blob> {
+    const token = getAccessToken()
+    const res = await fetch(`${API_BASE_URL}/courses/${courseId}/book`, {
+      method: 'GET',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(text || res.statusText)
+    }
+    return res.blob()
+  },
+  async openCourseBook(courseId: number | string): Promise<string> {
+    const blob = await this.fetchCourseBookBlob(courseId)
+    return URL.createObjectURL(blob)
   },
 }

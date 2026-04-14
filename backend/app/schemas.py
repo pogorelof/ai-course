@@ -43,6 +43,10 @@ class CourseCreate(BaseModel):
 class CourseOut(BaseModel):
     id: int
     title: str
+    wishes: Optional[str] = None
+    has_book: bool = False
+    book_name: Optional[str] = None
+    book_url: Optional[str] = None
 
     class Config:
         from_attributes = True

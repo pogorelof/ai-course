@@ -4,6 +4,7 @@ import uuid
 import shutil
 
 from fastapi import APIRouter, Depends, HTTPException, status, File, Form, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from openai import OpenAIError
@@ -387,7 +388,51 @@ def submit_topic_quiz(
 @router.get("/mine", response_model=List[CourseOut])
 def list_my_courses(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     courses = db.scalars(select(Course).where(Course.owner_id == current_user.id)).all()
-    return courses
+    result: list[CourseOut] = []
+    for course in courses:
+        has_book = bool(course.pdf_path and os.path.exists(course.pdf_path))
+        book_name = os.path.basename(course.pdf_path) if has_book and course.pdf_path else None
+        book_url = f"/courses/{course.id}/book" if has_book else None
+        wishes = course.wishes.strip() if course.wishes and course.wishes.strip() else None
+        result.append(
+            CourseOut(
+                id=course.id,
+                title=course.title,
+                wishes=wishes,
+                has_book=has_book,
+                book_name=book_name,
+                book_url=book_url,
+            )
+        )
+    return result
+
+
+@router.get("/{course_id}/book")
+def download_course_book(course_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    course = db.scalar(select(Course).where(Course.id == course_id))
+    if not course or course.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if not course.pdf_path or not os.path.exists(course.pdf_path):
+        raise HTTPException(status_code=404, detail="Book not found")
+    return FileResponse(course.pdf_path, media_type="application/pdf", filename=os.path.basename(course.pdf_path))
+
+
+@router.delete("/{course_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_course(course_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    course = db.scalar(select(Course).where(Course.id == course_id))
+    if not course or course.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    pdf_path = course.pdf_path
+    db.delete(course)
+    db.commit()
+
+    if pdf_path and os.path.exists(pdf_path):
+        try:
+            os.remove(pdf_path)
+        except OSError:
+            pass
+    return None
 
 
 @router.get("/{course_id}/topics", response_model=List[TopicOut])

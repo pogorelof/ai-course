@@ -52,6 +52,20 @@ def test_list_my_courses_and_topics(client: TestClient, auth_headers):
     assert len(r_topics.json()) == 15
 
 
+def test_delete_course(client: TestClient, auth_headers):
+    with patch("app.routers.courses.generate_course_outline", return_value=[f"A{i}" for i in range(15)]):
+        created = client.post("/courses/outline", data={"title": "Delete me", "wishes": "w"}, headers=auth_headers())
+        assert created.status_code == 200
+        course_id = created.json()["course_id"]
+
+    deleted = client.delete(f"/courses/{course_id}", headers=auth_headers())
+    assert deleted.status_code == 204
+
+    mine = client.get("/courses/mine", headers=auth_headers())
+    assert mine.status_code == 200
+    assert all(item["id"] != course_id for item in mine.json())
+
+
 def _create_course_and_topic(client: TestClient, auth_headers):
     with patch("app.routers.courses.generate_course_outline", return_value=["Intro"] + [f"T{i}" for i in range(14)]):
         create_course = client.post("/courses/outline", data={"title": "Course", "wishes": "w"}, headers=auth_headers())

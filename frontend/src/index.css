@@ -130,10 +130,116 @@ textarea {
   padding: 16px;
   background: var(--color-white);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   box-shadow: var(--color-shadow);
+}
+
+.course-card-main {
+  display: grid;
+  gap: 10px;
+}
+
+.course-main-content {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.course-wishes {
+  margin: 0;
+  color: rgba(0, 0, 0, 0.72);
+  text-align: left;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  font-size: 15px;
+}
+
+.course-wishes--empty {
+  color: var(--color-text-tertiary);
+  font-style: italic;
+}
+
+.course-row-split {
+  display: grid;
+  grid-template-columns: 7fr 3fr;
+  gap: 14px;
+  align-items: stretch;
+}
+
+.course-panel-main,
+.course-panel-book {
+  min-width: 0;
+}
+
+.course-panel-main {
+  background: var(--color-white);
+  border-radius: 8px;
+  box-shadow: var(--color-shadow);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.course-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.course-panel-book {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.book-cover-link {
+  text-decoration: none;
+  color: inherit;
+  width: fit-content;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.book-cover {
+  width: 130px;
+  min-height: 168px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: linear-gradient(155deg, #f7fbff 0%, #eef2f7 100%);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: stretch;
+  box-shadow: rgba(0, 0, 0, 0.08) 0 4px 10px;
+}
+
+.book-cover-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #0d47a1;
+}
+
+.book-cover-title {
+  font-size: 12px;
+  line-height: 1.35;
+  color: #1d1d1f;
+  word-break: break-word;
+}
+
+.book-cover-image {
+  width: 100%;
+  height: 132px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  margin-top: 8px;
 }
 
 .form-card {
@@ -231,6 +337,13 @@ textarea {
 
 .btn-pill:hover {
   text-decoration: underline;
+}
+
+.btn-pill-delete,
+.btn-pill-delete:hover {
+  color: var(--color-link-blue);
+  border-color: var(--color-link-blue);
+  background: transparent;
 }
 
 .link-inline {
@@ -359,5 +472,13 @@ textarea {
     font-size: 28px;
     line-height: 1.14;
     letter-spacing: 0.196px;
+  }
+
+  .course-row-split {
+    grid-template-columns: 1fr;
+  }
+
+  .course-panel-book {
+    justify-content: flex-start;
   }
 }
