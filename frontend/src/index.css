@@ -1,5 +1,5 @@
 :root {
-  --color-light-bg: #f5f5f7;
+  --color-light-bg: #ffffff;
   --color-near-black: #1d1d1f;
   --color-white: #ffffff;
   --color-text-secondary: rgba(0, 0, 0, 0.8);
@@ -81,7 +81,7 @@ textarea {
 }
 
 .surface-card--light {
-  background: var(--color-light-bg);
+  background: var(--color-white);
   color: var(--color-near-black);
   box-shadow: var(--color-shadow);
 }

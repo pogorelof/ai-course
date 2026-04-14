@@ -38,19 +38,18 @@ export function TopicPage() {
   }, [token, topicId])
 
   return (
-    <PageContainer>
-      <div className="section-stack">
+    <PageContainer fullWidth>
+      <div className="section-stack" style={{ width: '100%', maxWidth: 1600, margin: '0 auto' }}>
         {loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, paddingTop: 8 }}>
             <LoadingPulse />
             <span>Генерируем контент...</span>
           </div>
         ) : (
           <>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', width: '100%', maxWidth: 1500, margin: '0 auto' }}>
               <div style={{ display: 'grid', gap: 6 }}>
                 <h1 className="page-hero-title">{title ? `Курс: ${title}` : 'Глава курса'}</h1>
-                <p className="page-subtitle">Сфокусированное чтение с чистой типографикой.</p>
               </div>
               {courseId && (
                 <Link to={`/courses/${courseId}`} className="btn btn-pill">
@@ -58,9 +57,9 @@ export function TopicPage() {
                 </Link>
               )}
             </div>
-            {error && <p className="status-error">{error}</p>}
+            {error && <p className="status-error" style={{ textAlign: 'center' }}>{error}</p>}
             {content && (
-              <div className="surface-card surface-card--light">
+              <div className="surface-card surface-card--light" style={{ width: '100%', maxWidth: 1500, margin: '0 auto' }}>
                 <MarkdownRenderer markdown={content} />
               </div>
             )}

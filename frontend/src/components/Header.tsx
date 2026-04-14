@@ -9,7 +9,7 @@ export function Header({ auth, onLogout }: { auth: AuthState; onLogout: () => vo
         top: 0,
         zIndex: 30,
         height: 48,
-        background: 'rgba(245, 245, 247, 0.88)',
+        background: 'rgba(255, 255, 255, 0.92)',
         backdropFilter: 'saturate(180%) blur(20px)',
         WebkitBackdropFilter: 'saturate(180%) blur(20px)',
         borderBottom: '1px solid rgba(0, 0, 0, 0.06)',

@@ -50,7 +50,7 @@ export function MarkdownRenderer({ markdown }: { markdown: string }) {
     <div
       ref={containerRef}
       className="prose"
-      style={{ background: '#f5f5f7', borderRadius: 8, padding: 20, textAlign: 'left', lineHeight: 1.47, color: '#1d1d1f' }}
+      style={{ background: '#ffffff', borderRadius: 8, padding: 20, textAlign: 'left', lineHeight: 1.47, color: '#1d1d1f' }}
     >
       <style>{`
         .prose h1, .prose h2, .prose h3 {
@@ -63,7 +63,14 @@ export function MarkdownRenderer({ markdown }: { markdown: string }) {
         .prose h1 { font-size: 40px; letter-spacing: -0.28px; }
         .prose h2 { font-size: 28px; letter-spacing: 0.196px; line-height: 1.14; }
         .prose h3, .prose h4, .prose h5, .prose h6 { font-size: 21px; line-height: 1.19; letter-spacing: 0.231px; color: #1d1d1f; }
-        .prose p { margin: 0.45em 0; color: rgba(0, 0, 0, 0.8); font-size: 17px; letter-spacing: -0.374px; line-height: 1.47; }
+        .prose p {
+          margin: 0.45em 0;
+          color: rgba(0, 0, 0, 0.8);
+          font-size: 19px;
+          letter-spacing: -0.374px;
+          line-height: 1.55;
+          text-indent: 2em;
+        }
         .prose ul, .prose ol { margin: 0.5em 0; padding-left: 1.2em; }
         .prose ul { list-style: disc; list-style-position: outside; }
         .prose li { margin: 0.2em 0; }
@@ -73,22 +80,22 @@ export function MarkdownRenderer({ markdown }: { markdown: string }) {
           margin: 10px 0;
           overflow: auto;
           text-align: left;
-          background: #ffffff;
-          color: #1d1d1f;
+          background: #1d1d1f;
+          color: #ffffff;
           padding: 16px;
           border-radius: 8px;
           position: relative;
-          border: 1px solid rgba(0, 0, 0, 0.08);
+          border: none;
         }
-        .prose pre .lang-badge, .prose .md-code .lang-badge { position: absolute; top: 8px; right: 10px; font-size: 12px; color: rgba(0,0,0,0.48); letter-spacing: -0.12px; }
+        .prose pre .lang-badge, .prose .md-code .lang-badge { position: absolute; top: 8px; right: 10px; font-size: 12px; color: rgba(255,255,255,0.72); letter-spacing: -0.12px; }
         .prose pre code, .prose .md-code code { background: transparent; }
         .prose code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-        .tok-keyword { color: #0066cc; }
-        .tok-string  { color: #166534; }
-        .tok-number  { color: #b42318; }
-        .tok-comment { color: #667085; }
-        .tok-tag     { color: #b54708; }
-        .tok-attr    { color: #175cd3; }
+        .tok-keyword { color: #7dd3fc; }
+        .tok-string  { color: #86efac; }
+        .tok-number  { color: #fda4af; }
+        .tok-comment { color: #9ca3af; }
+        .tok-tag     { color: #fcd34d; }
+        .tok-attr    { color: #fde68a; }
       `}</style>
       <div dangerouslySetInnerHTML={{ __html: html }} />
     </div>
