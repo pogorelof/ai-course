@@ -22,11 +22,16 @@ Environment file (`backend/.env`):
 ```
 SECRET_KEY=change_me_in_production
 OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-5-nano
+OPENAI_MODEL=gpt-4o-mini
 # Optional
 # LANGCHAIN_TRACING_V2=true
 ```
-`OPENAI_MODEL` - Models used for testing: `gpt-5` and `gpt-5-nano`.
+
+You can copy a template:
+
+```bash
+cp backend/.env.example backend/.env
+```
 
 `SECRET_KEY` - for JWT auth. You can leave `change_me_in_production` for tests.
 
@@ -103,5 +108,7 @@ PROXY_URL=http://host:port
 Then restart the backend server to apply changes.
 
 Notes:
+
 - Only HTTP(S) proxies are supported (backend uses `httpx`).
 - The proxy must egress from a country/region supported by OpenAI. Otherwise you may see `unsupported_country_region_territory`.
+

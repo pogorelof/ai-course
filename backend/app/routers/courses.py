@@ -6,6 +6,7 @@ import shutil
 from fastapi import APIRouter, Depends, HTTPException, status, File, Form, UploadFile
 from sqlalchemy.orm import Session
 from sqlalchemy import select
+from openai import OpenAIError
 
 from ..db import get_db
 from ..core.security import get_current_user
@@ -65,7 +66,13 @@ def create_outline(
         pdf_path = file_path
         pdf_text = extract_text_from_pdf(file_path)
 
-    titles = generate_course_outline(title, wishes, pdf_text)
+    try:
+        titles = generate_course_outline(title, wishes, pdf_text)
+    except OpenAIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
     if len(titles) != 15:
         raise HTTPException(status_code=500, detail="Failed to generate 15 topics")
 
@@ -105,7 +112,13 @@ def generate_content(topic_id: int, db: Session = Depends(get_db), current_user=
     if course.pdf_path and os.path.exists(course.pdf_path):
          pdf_text = extract_text_from_pdf(course.pdf_path)
 
-    content = generate_topic_content(course.title, course.wishes, topic.title, pdf_text)
+    try:
+        content = generate_topic_content(course.title, course.wishes, topic.title, pdf_text)
+    except OpenAIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
     topic.content = content
     db.add(topic)
     db.commit()
