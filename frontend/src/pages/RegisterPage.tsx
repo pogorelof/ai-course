@@ -27,79 +27,48 @@ export function RegisterPage() {
 
   return (
     <PageContainer>
-      <div style={{ display: 'grid', placeItems: 'center', minHeight: '60vh' }}>
-        <div style={{ width: '100%', maxWidth: 420 }}>
-          <h1 style={{ fontSize: 28, marginBottom: 16, textAlign: 'center' }}>Регистрация</h1>
-          <form className="glass-surface" style={{ display: 'grid', gap: 12, padding: 16, borderRadius: 16 }} onSubmit={handleSubmit}>
-            {error && (
-              <div style={{
-                background: '#fee2e2', color: '#991b1b', border: '1px solid #fecaca',
-                padding: '8px 12px', borderRadius: 8
-              }}>{error}</div>
-            )}
-            <label style={{ display: 'grid', gap: 6 }}>
+      <div className="section-stack">
+        <div style={{ textAlign: 'center', display: 'grid', gap: 8 }}>
+          <h1 className="page-hero-title">Регистрация</h1>
+          <p className="page-subtitle">Создайте аккаунт и получите доступ к созданию курсов.</p>
+        </div>
+        <div className="form-card">
+          <form className="form-grid" onSubmit={handleSubmit}>
+            {error && <p className="status-error">{error}</p>}
+            <div className="field">
               <span>Логин</span>
               <input
                 type="text"
                 placeholder="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="glass-input"
-                style={{ padding: '12px 14px', borderRadius: 10, fontSize: 16 }}
+                className="input"
                 required
               />
-            </label>
-            <label style={{ display: 'grid', gap: 6 }}>
+            </div>
+            <div className="field">
               <span>Email</span>
               <input
                 type="email"
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="glass-input"
-                style={{ padding: '12px 14px', borderRadius: 10, fontSize: 16 }}
+                className="input"
                 required
               />
-            </label>
-            <label style={{ display: 'grid', gap: 6 }}>
+            </div>
+            <div className="field">
               <span>Пароль</span>
               <input
                 type="password"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="glass-input"
-                style={{ padding: '12px 14px', borderRadius: 10, fontSize: 16 }}
+                className="input"
                 required
               />
-            </label>
-            <button
-              type="submit"
-              disabled={loading}
-              className="glass-button"
-              style={{
-                padding: '12px 16px',
-                borderRadius: 10,
-                border: '1px solid rgba(37,99,235,0.45)',
-                background: 'rgba(37,99,235,0.18)',
-                color: '#e5e7eb',
-                width: '100%',
-                opacity: loading ? 0.8 : 1,
-                cursor: loading ? 'not-allowed' : 'pointer',
-                transition: 'transform .12s, filter .12s'
-              }}
-              onMouseEnter={(e) => {
-                if (loading) return
-                const btn = e.currentTarget as HTMLButtonElement
-                btn.style.transform = 'translateY(-1px)'
-                btn.style.filter = 'brightness(1.1)'
-              }}
-              onMouseLeave={(e) => {
-                const btn = e.currentTarget as HTMLButtonElement
-                btn.style.transform = 'translateY(0)'
-                btn.style.filter = 'none'
-              }}
-            >
+            </div>
+            <button type="submit" disabled={loading} className="btn btn-primary" style={{ width: '100%' }}>
               {loading ? 'Создаём...' : 'Создать аккаунт'}
             </button>
           </form>

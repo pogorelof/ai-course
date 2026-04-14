@@ -31,19 +31,32 @@ export function CoursePage() {
 
   return (
     <PageContainer>
-      <h1 style={{ fontSize: 28, marginBottom: 12 }}>Темы курса</h1>
-      {loading && <LoadingPulse />}
-      {error && <p style={{ color: '#b91c1c' }}>{error}</p>}
-      <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 12 }}>
-        {topics.map(t => (
-          <li key={t.id} className="glass-surface" style={{ borderRadius: 14, padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>{t.title}</span>
-            <Link to={`/topics/${t.id}`} style={{ textDecoration: 'none' }}>
-              <button className="glass-button" style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(37,99,235,0.4)', cursor: 'pointer', transition: 'transform .12s' }} onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.03)' }} onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.0)' }}>Открыть</button>
-            </Link>
-          </li>
-        ))}
-      </ul>
+      <div className="section-stack">
+        <div style={{ display: 'grid', gap: 6 }}>
+          <h1 className="page-hero-title">Темы курса</h1>
+          <p className="page-subtitle">Выберите тему и откройте детальную главу.</p>
+        </div>
+
+        {loading && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <LoadingPulse />
+            <p className="status-muted">Загрузка тем...</p>
+          </div>
+        )}
+        {error && <p className="status-error">{error}</p>}
+        {!loading && !error && topics.length === 0 && <p className="status-muted">Пока нет тем для этого курса.</p>}
+
+        <ul className="list-stack">
+          {topics.map(t => (
+            <li key={t.id} className="list-row">
+              <span style={{ fontWeight: 600, lineHeight: 1.24 }}>{t.title}</span>
+              <Link to={`/topics/${t.id}`} className="btn btn-pill">
+                Открыть
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
     </PageContainer>
   )
 }

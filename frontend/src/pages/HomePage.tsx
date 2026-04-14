@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { CoursesAPI } from '../services/api'
 import type { Course } from '../types/domain'
 import { PageContainer } from '../components/PageContainer'
+import { LoadingPulse } from '../components/LoadingPulse'
 
 export function HomePage() {
   const token = typeof localStorage !== 'undefined' ? localStorage.getItem('access_token') : null
@@ -29,55 +30,42 @@ export function HomePage() {
 
   return (
     <PageContainer>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <h1 style={{ fontSize: 28, marginBottom: 12 }}>Мои курсы</h1>
+      <div className="section-stack">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+          <div style={{ display: 'grid', gap: 6 }}>
+            <h1 className="page-hero-title">Мои курсы</h1>
+            <p className="page-subtitle">Ваши персональные курсы и точки входа в главы.</p>
+          </div>
+          {token && (
+            <Link to="/new" className="btn btn-primary">
+              Создать курс
+            </Link>
+          )}
+        </div>
+        {!token && <p className="status-muted">Войдите, чтобы видеть свои курсы.</p>}
         {token && (
-          <Link
-            to="/new"
-            className="glass-button"
-            style={{
-              padding: '10px 16px',
-              borderRadius: 10,
-              border: '1px solid rgba(37,99,235,0.45)',
-              background: 'rgba(37,99,235,0.18)',
-              color: '#e5e7eb',
-              textDecoration: 'none',
-              display: 'inline-block',
-              cursor: 'pointer',
-              transition: 'transform .12s, filter .12s'
-            }}
-            onMouseEnter={(e) => {
-              const el = e.currentTarget as HTMLAnchorElement
-              el.style.transform = 'translateY(-1px)'
-              el.style.filter = 'brightness(1.1)'
-            }}
-            onMouseLeave={(e) => {
-              const el = e.currentTarget as HTMLAnchorElement
-              el.style.transform = 'translateY(0)'
-              el.style.filter = 'none'
-            }}
-          >
-            Создать курс
-          </Link>
+          <div className="section-stack">
+            {loading && (
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <LoadingPulse />
+                <p className="status-muted">Загрузка курсов...</p>
+              </div>
+            )}
+            {error && <p className="status-error">{error}</p>}
+            {!loading && !error && courses.length === 0 && <p className="status-muted">Курсов пока нет. Начните с создания нового.</p>}
+            <ul className="list-stack">
+              {courses.map((c) => (
+                <li key={c.id} className="list-row">
+                  <span style={{ fontWeight: 600, lineHeight: 1.24 }}>{c.title}</span>
+                  <Link to={`/courses/${c.id}`} className="btn btn-pill">
+                    Открыть
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
-      {!token && <p>Войдите, чтобы видеть свои курсы.</p>}
-      {token && (
-        <div>
-          {loading && <p>Загрузка...</p>}
-          {error && <p style={{ color: '#b91c1c' }}>{error}</p>}
-          <ul style={{ listStyle: 'none', padding: 0, display: 'grid', gap: 12 }}>
-            {courses.map((c) => (
-              <li key={c.id} className="glass-surface" style={{ borderRadius: 14, padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>{c.title}</span>
-                <Link to={`/courses/${c.id}`} style={{ textDecoration: 'none' }}>
-                  <button className="glass-button" style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(37,99,235,0.4)', cursor: 'pointer', transition: 'transform .12s' }} onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.03)' }} onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.0)' }}>Открыть</button>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </PageContainer>
   )
 }

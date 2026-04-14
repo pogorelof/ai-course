@@ -50,39 +50,45 @@ export function MarkdownRenderer({ markdown }: { markdown: string }) {
     <div
       ref={containerRef}
       className="prose"
-      style={{ background: 'transparent', borderRadius: 10, padding: 4, textAlign: 'left', lineHeight: 1.6, color: '#e5e7eb' }}
+      style={{ background: '#f5f5f7', borderRadius: 8, padding: 20, textAlign: 'left', lineHeight: 1.47, color: '#1d1d1f' }}
     >
       <style>{`
-        .prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 { margin: 0.7em 0 0.35em; font-weight: 700; color: #f8fafc; }
-        .prose p { margin: 0.45em 0; color: #e5e7eb; }
+        .prose h1, .prose h2, .prose h3 {
+          margin: 0.75em 0 0.35em;
+          font-family: "SF Pro Display", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+          font-weight: 600;
+          line-height: 1.1;
+          color: #1d1d1f;
+        }
+        .prose h1 { font-size: 40px; letter-spacing: -0.28px; }
+        .prose h2 { font-size: 28px; letter-spacing: 0.196px; line-height: 1.14; }
+        .prose h3, .prose h4, .prose h5, .prose h6 { font-size: 21px; line-height: 1.19; letter-spacing: 0.231px; color: #1d1d1f; }
+        .prose p { margin: 0.45em 0; color: rgba(0, 0, 0, 0.8); font-size: 17px; letter-spacing: -0.374px; line-height: 1.47; }
         .prose ul, .prose ol { margin: 0.5em 0; padding-left: 1.2em; }
         .prose ul { list-style: disc; list-style-position: outside; }
         .prose li { margin: 0.2em 0; }
-        .prose a { color: #93c5fd; }
-        .prose code { background:#0b1220; padding: 2px 6px; border-radius: 6px; }
+        .prose a { color: #0066cc; }
+        .prose code { background: rgba(0, 0, 0, 0.06); padding: 2px 6px; border-radius: 5px; }
         .prose pre, .prose .md-code {
           margin: 10px 0;
           overflow: auto;
           text-align: left;
-          background: rgba(255,255,255,0.08);
-          color: #e5e7eb;
+          background: #ffffff;
+          color: #1d1d1f;
           padding: 16px;
-          border-radius: 18px;
+          border-radius: 8px;
           position: relative;
-          border: 1px solid rgba(255,255,255,0.14);
-          box-shadow: 0 6px 20px rgba(2,6,23,0.20), inset 0 1px 0 rgba(255,255,255,0.06);
-          backdrop-filter: saturate(160%) blur(16px);
-          -webkit-backdrop-filter: saturate(160%) blur(16px);
+          border: 1px solid rgba(0, 0, 0, 0.08);
         }
-        .prose pre .lang-badge, .prose .md-code .lang-badge { position: absolute; top: 6px; right: 8px; font-size: 12px; color: #cbd5e1; }
+        .prose pre .lang-badge, .prose .md-code .lang-badge { position: absolute; top: 8px; right: 10px; font-size: 12px; color: rgba(0,0,0,0.48); letter-spacing: -0.12px; }
         .prose pre code, .prose .md-code code { background: transparent; }
         .prose code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-        .tok-keyword { color: #93c5fd; }
-        .tok-string  { color: #86efac; }
-        .tok-number  { color: #fca5a5; }
-        .tok-comment { color: #94a3b8; }
-        .tok-tag     { color: #fcd34d; }
-        .tok-attr    { color: #fde68a; }
+        .tok-keyword { color: #0066cc; }
+        .tok-string  { color: #166534; }
+        .tok-number  { color: #b42318; }
+        .tok-comment { color: #667085; }
+        .tok-tag     { color: #b54708; }
+        .tok-attr    { color: #175cd3; }
       `}</style>
       <div dangerouslySetInnerHTML={{ __html: html }} />
     </div>
@@ -121,7 +127,7 @@ function toHtml(md: string) {
   text = text.replace(/^###\s+(.*)$/gm, '<h3>$1</h3>')
   text = text.replace(/^##\s+(.*)$/gm, '<h2>$1</h2>')
   text = text.replace(/^#\s+(.*)$/gm, '<h1>$1</h1>')
-  text = text.replace(/`([^`]+)`/g, '<code style="background:rgba(148,163,184,0.22);color:#e5e7eb;padding:2px 6px;border-radius:6px">$1</code>')
+  text = text.replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,0.06);color:#1d1d1f;padding:2px 6px;border-radius:5px">$1</code>')
   text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
   text = text.replace(/\*(.*?)\*/g, '<em>$1</em>')
   text = text.replace(/^(?:-\s+.+\n?)+/gm, (block) => {
@@ -139,7 +145,7 @@ function toHtml(md: string) {
   return text
 }
 
-function highlightCode(language: string, code: string): string {
+function highlightCode(_language: string, code: string): string {
   // Disable naive regex-based highlighting to avoid corrupting code with class attributes.
   // Return escaped raw code; visual styling handled by the container.
   return escapeHtml(code)

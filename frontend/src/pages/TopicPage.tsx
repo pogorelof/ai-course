@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { CoursesAPI } from '../services/api'
 import type { GeneratedTopic } from '../types/domain'
@@ -14,30 +14,6 @@ export function TopicPage() {
   const [courseId, setCourseId] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  // Subtle random gradient glow background per topic
-  const glowStyle = useMemo(() => {
-    // random seeds based on topicId to keep consistent per topic
-    const seed = Number(topicId || 0)
-    const rnd = (min: number, max: number, s: number) => {
-      const x = Math.sin(s + 1) * 10000
-      return min + (x - Math.floor(x)) * (max - min)
-    }
-    const c1 = 'rgba(236, 72, 153, 0.14)'
-    const c2 = 'rgba(59, 130, 246, 0.14)'
-    const c3 = 'rgba(245, 158, 11, 0.12)'
-    const p1 = `${rnd(5, 85, seed + 1)}% ${rnd(0, 40, seed + 2)}%`
-    const p2 = `${rnd(20, 90, seed + 3)}% ${rnd(50, 100, seed + 4)}%`
-    const p3 = `${rnd(0, 60, seed + 5)}% ${rnd(30, 90, seed + 6)}%`
-    const bg = `radial-gradient(800px 600px at ${p1}, ${c1}, transparent 60%),
-                radial-gradient(700px 500px at ${p2}, ${c2}, transparent 60%),
-                radial-gradient(700px 500px at ${p3}, ${c3}, transparent 60%)`
-    return {
-      background: bg,
-      filter: 'blur(40px) saturate(120%)',
-      opacity: 0.6,
-    } as React.CSSProperties
-  }, [topicId])
 
   useEffect(() => {
     const run = async () => {
@@ -62,38 +38,34 @@ export function TopicPage() {
   }, [token, topicId])
 
   return (
-    <PageContainer fullWidth>
-      <div style={{ position: 'relative' }}>
-        <div aria-hidden style={{ position: 'absolute', inset: -120, zIndex: 0, pointerEvents: 'none', ...glowStyle }} />
-      </div>
-      <div style={{ position: 'relative', zIndex: 1 }}>
-        <div style={{ minWidth: 0 }}>
-          {loading ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 8 }}>
-              <LoadingPulse />
-              <span>Генерируем контент...</span>
-            </div>
-          ) : (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <h1 style={{ fontSize: 24, marginBottom: 12, color: '#f1f5f9' }}>{title ? `Курс: ${title}` : ''}</h1>
-                <div>
-                  {courseId && (
-                    <Link to={`/courses/${courseId}`} style={{ textDecoration: 'none' }}>
-                      <button className="glass-button" style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(37,99,235,0.4)', cursor: 'pointer', transition: 'transform .12s' }} onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-1px)' }} onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)' }}>Все темы</button>
-                    </Link>
-                  )}
-                </div>
+    <PageContainer>
+      <div className="section-stack">
+        {loading ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 8 }}>
+            <LoadingPulse />
+            <span>Генерируем контент...</span>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ display: 'grid', gap: 6 }}>
+                <h1 className="page-hero-title">{title ? `Курс: ${title}` : 'Глава курса'}</h1>
+                <p className="page-subtitle">Сфокусированное чтение с чистой типографикой.</p>
               </div>
-              {error && <p style={{ color: '#b91c1c' }}>{error}</p>}
-              {content && (
-                <div className="glass-surface" style={{ borderRadius: 16, padding: 12 }}>
-                  <MarkdownRenderer markdown={content} />
-                </div>
+              {courseId && (
+                <Link to={`/courses/${courseId}`} className="btn btn-pill">
+                  Все темы
+                </Link>
               )}
-            </>
-          )}
-        </div>
+            </div>
+            {error && <p className="status-error">{error}</p>}
+            {content && (
+              <div className="surface-card surface-card--light">
+                <MarkdownRenderer markdown={content} />
+              </div>
+            )}
+          </>
+        )}
       </div>
     </PageContainer>
   )

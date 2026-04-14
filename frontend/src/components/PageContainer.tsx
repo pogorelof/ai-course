@@ -1,22 +1,18 @@
-export function PageContainer({ children, fullWidth = false }: { children: React.ReactNode; fullWidth?: boolean }) {
+export function PageContainer({
+  children,
+  tone = 'light',
+  fullWidth = false
+}: {
+  children: React.ReactNode
+  tone?: 'light' | 'dark'
+  fullWidth?: boolean
+}) {
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'transparent',
-      color: '#e5e7eb'
-    }}>
-      <main
-        className="glass-surface"
-        style={{
-          maxWidth: fullWidth ? 'none' : 960,
-          margin: fullWidth ? '24px 16px' : '24px auto',
-          padding: '24px 16px',
-          borderRadius: 16
-        }}
-      >
+    <main className={`app-page app-page--${tone}`}>
+      <div className={fullWidth ? undefined : 'app-container'}>
         {children}
-      </main>
-    </div>
+      </div>
+    </main>
   )
 }
 
