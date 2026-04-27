@@ -20,6 +20,9 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
 
     courses: Mapped[list["Course"]] = relationship("Course", back_populates="owner", cascade="all, delete-orphan")
+    api_keys: Mapped[Optional["UserAPIKeys"]] = relationship(
+        "UserAPIKeys", back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
 
 
 class Course(Base):
@@ -33,6 +36,35 @@ class Course(Base):
 
     owner: Mapped[User] = relationship("User", back_populates="courses")
     topics: Mapped[list["CourseTopic"]] = relationship("CourseTopic", back_populates="course", cascade="all, delete-orphan")
+    ai_settings: Mapped[Optional["CourseAISettings"]] = relationship(
+        "CourseAISettings", back_populates="course", uselist=False, cascade="all, delete-orphan"
+    )
+
+
+class CourseAISettings(Base):
+    __tablename__ = "course_ai_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    course_id: Mapped[int] = mapped_column(
+        ForeignKey("courses.id", ondelete="CASCADE"), nullable=False, unique=True, index=True
+    )
+    ai_provider: Mapped[str] = mapped_column(String(32), nullable=False, default="openai")
+    ai_model: Mapped[str] = mapped_column(String(64), nullable=False, default="gpt-5-mini")
+
+    course: Mapped[Course] = relationship("Course", back_populates="ai_settings")
+
+
+class UserAPIKeys(Base):
+    __tablename__ = "user_api_keys"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True
+    )
+    openai_api_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    openrouter_api_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    user: Mapped[User] = relationship("User", back_populates="api_keys")
 
 
 class CourseTopic(Base):
@@ -50,6 +82,23 @@ class CourseTopic(Base):
     quiz: Mapped[Optional["TopicQuiz"]] = relationship(
         "TopicQuiz", back_populates="topic", uselist=False, cascade="all, delete-orphan"
     )
+    content_generation: Mapped[Optional["TopicContentGeneration"]] = relationship(
+        "TopicContentGeneration", back_populates="topic", uselist=False, cascade="all, delete-orphan"
+    )
+
+
+class TopicContentGeneration(Base):
+    __tablename__ = "topic_content_generation"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    topic_id: Mapped[int] = mapped_column(
+        ForeignKey("course_topics.id", ondelete="CASCADE"), nullable=False, unique=True, index=True
+    )
+    ai_provider: Mapped[str] = mapped_column(String(32), nullable=False, default="openai")
+    ai_model: Mapped[str] = mapped_column(String(64), nullable=False, default="gpt-5-mini")
+    generated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+    topic: Mapped[CourseTopic] = relationship("CourseTopic", back_populates="content_generation")
 
 
 class TopicQuiz(Base):

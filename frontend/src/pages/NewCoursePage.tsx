@@ -4,12 +4,25 @@ import { CoursesAPI } from '../services/api'
 import type { Topic } from '../types/domain'
 import { PageContainer } from '../components/PageContainer'
 import { LoadingPulse } from '../components/LoadingPulse'
+import { OpenAILogo } from '../components/OpenAILogo'
+
+const OPENAI_MODELS = [
+  { id: 'gpt-5.5', label: 'gpt-5.5', inputPrice: '$5', outputPrice: '$30' },
+  { id: 'gpt-5.4', label: 'gpt-5.4', inputPrice: '$2.5', outputPrice: '$15' },
+  { id: 'gpt-5.4-mini', label: 'gpt-5.4-mini', inputPrice: '$0.75', outputPrice: '$4.5' },
+  { id: 'gpt-5.4-nano', label: 'gpt-5.4-nano', inputPrice: '$0.2', outputPrice: '$1.25' },
+  { id: 'gpt-5-mini', label: 'gpt-5-mini', inputPrice: '$0.25', outputPrice: '$2' },
+  { id: 'gpt-5-nano', label: 'gpt-5-nano', inputPrice: '$0.05', outputPrice: '$0.4' },
+] as const
 
 export function NewCoursePage() {
   const token = typeof localStorage !== 'undefined' ? localStorage.getItem('access_token') : null
   const navigate = useNavigate()
   const [title, setTitle] = useState('')
   const [wishes, setWishes] = useState('')
+  const [aiProvider, setAiProvider] = useState<'openai' | 'openrouter'>('openai')
+  const [aiModel, setAiModel] = useState<string>('gpt-5-mini')
+  const [modelsOpen, setModelsOpen] = useState(false)
   const [file, setFile] = useState<File | undefined>(undefined)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -22,7 +35,13 @@ export function NewCoursePage() {
     setLoading(true)
     setError(null)
     try {
-      const data = await CoursesAPI.outline({ title, wishes, file })
+      const data = await CoursesAPI.outline({
+        title,
+        wishes,
+        ai_provider: aiProvider,
+        ai_model: aiModel,
+        file,
+      })
       setCreatedCourseId(data.course_id)
       setTopics(data.topics)
     } catch (e) {
@@ -50,6 +69,72 @@ export function NewCoursePage() {
               <div className="field">
                 <span>Ваши пожелания</span>
                 <textarea value={wishes} onChange={(e) => setWishes(e.target.value)} rows={6} required className="textarea" style={{ resize: 'vertical' }} />
+              </div>
+              <div className="field">
+                <span>AI провайдер</span>
+                <div className="provider-toggle">
+                  <button
+                    type="button"
+                    className={`provider-chip ${aiProvider === 'openai' ? 'provider-chip--active' : ''}`}
+                    onClick={() => setAiProvider('openai')}
+                  >
+                    OpenAI
+                  </button>
+                  <button
+                    type="button"
+                    className="provider-chip provider-chip--disabled"
+                    disabled
+                    title="OpenRouter скоро будет доступен"
+                    onClick={() => setAiProvider('openrouter')}
+                  >
+                    OpenRouter (скоро)
+                  </button>
+                </div>
+              </div>
+              <div className="field">
+                <span>Модель OpenAI</span>
+                <div className="model-dropdown">
+                  <button
+                    type="button"
+                    className="model-dropdown-trigger"
+                    onClick={() => setModelsOpen(prev => !prev)}
+                  >
+                    <span className="model-trigger-title">
+                      <OpenAILogo size={14} />
+                      <span>{OPENAI_MODELS.find(item => item.id === aiModel)?.label ?? aiModel}</span>
+                    </span>
+                    <span className="model-dropdown-hint">
+                      input {OPENAI_MODELS.find(item => item.id === aiModel)?.inputPrice} / output {OPENAI_MODELS.find(item => item.id === aiModel)?.outputPrice}
+                    </span>
+                  </button>
+                  {modelsOpen && (
+                    <div className="model-dropdown-panel">
+                      {OPENAI_MODELS.map((item) => (
+                        <button
+                          type="button"
+                          key={item.id}
+                          className={`model-card ${aiModel === item.id ? 'model-card--active' : ''}`}
+                          onClick={() => {
+                            setAiModel(item.id)
+                            setModelsOpen(false)
+                          }}
+                        >
+                          <div className="model-card-title">
+                            <OpenAILogo size={14} />
+                            <span>{item.label}</span>
+                          </div>
+                          <div className="model-card-prices">
+                            <span>Input: {item.inputPrice}</span>
+                            <span>Output: {item.outputPrice}</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="price-note">
+                  Цены за 1M токенов: input / output
+                </div>
               </div>
               <div className="field">
                 <span>PDF материал (необязательно)</span>

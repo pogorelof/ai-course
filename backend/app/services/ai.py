@@ -1,6 +1,5 @@
 import json
 from typing import Dict, List, Optional
-import os
 
 from openai import OpenAI
 from openai import OpenAIError
@@ -18,10 +17,11 @@ from .prompts import (
 )
 
 
-def _client() -> OpenAI:
-    if not settings.OPENAI_API_KEY:
+def _client(api_key: Optional[str] = None) -> OpenAI:
+    resolved_api_key = (api_key or "").strip()
+    if not resolved_api_key:
         raise OpenAIError(
-            "OPENAI_API_KEY is not configured. Set it via environment or backend/.env."
+            "OpenAI API key is not configured for this account."
         )
 
     proxies: dict | None = None
@@ -33,7 +33,7 @@ def _client() -> OpenAI:
             "https://": settings.PROXY_URL,
         }
         http_client = httpx.Client(proxies=proxies, timeout=60)
-    return OpenAI(api_key=settings.OPENAI_API_KEY, http_client=http_client)
+    return OpenAI(api_key=resolved_api_key, http_client=http_client)
 
 
 def extract_text_from_pdf(file_path: str) -> str:
@@ -48,7 +48,13 @@ def extract_text_from_pdf(file_path: str) -> str:
         return ""
 
 
-def generate_course_outline(title: str, wishes: str, pdf_text: Optional[str] = None) -> List[str]:
+def generate_course_outline(
+    title: str,
+    wishes: str,
+    model: str,
+    pdf_text: Optional[str] = None,
+    api_key: Optional[str] = None,
+) -> List[str]:
     sys = COURSE_OUTLINE_SYSTEM_PROMPT
     
     user_content = f"Course title: {title}\nPreferences: {wishes}\n"
@@ -59,9 +65,9 @@ def generate_course_outline(title: str, wishes: str, pdf_text: Optional[str] = N
     
     user_content += "Return exactly 15 unique topics, one per line."
     
-    client = _client()
+    client = _client(api_key=api_key)
     resp = client.chat.completions.create(
-        model=settings.OPENAI_MODEL,
+        model=model,
         messages=[
             {"role": "system", "content": sys},
             {"role": "user", "content": user_content},
@@ -72,7 +78,14 @@ def generate_course_outline(title: str, wishes: str, pdf_text: Optional[str] = N
     return lines[:15] if len(lines) >= 15 else lines
 
 
-def generate_topic_content(course_title: str, wishes: str, topic_title: str, pdf_text: Optional[str] = None) -> str:
+def generate_topic_content(
+    course_title: str,
+    wishes: str,
+    topic_title: str,
+    model: str,
+    pdf_text: Optional[str] = None,
+    api_key: Optional[str] = None,
+) -> str:
     sys = TOPIC_CONTENT_SYSTEM_PROMPT
     
     user_content = f"Course: {course_title}\nPreferences: {wishes}\nTopic: {topic_title}\n"
@@ -83,9 +96,9 @@ def generate_topic_content(course_title: str, wishes: str, topic_title: str, pdf
 
     user_content += "Generate the lesson content now."
     
-    client = _client()
+    client = _client(api_key=api_key)
     resp = client.chat.completions.create(
-        model=settings.OPENAI_MODEL,
+        model=model,
         messages=[
             {"role": "system", "content": sys},
             {"role": "user", "content": user_content},
@@ -104,7 +117,13 @@ def _parse_json_response(text: str, context_name: str) -> dict:
     return data
 
 
-def generate_topic_quiz(course_title: str, topic_title: str, topic_content: str) -> List[dict]:
+def generate_topic_quiz(
+    course_title: str,
+    topic_title: str,
+    topic_content: str,
+    model: str,
+    api_key: Optional[str] = None,
+) -> List[dict]:
     user_content = (
         f"Course: {course_title}\n"
         f"Topic: {topic_title}\n"
@@ -112,9 +131,9 @@ def generate_topic_quiz(course_title: str, topic_title: str, topic_content: str)
         "Generate quiz now."
     )
 
-    client = _client()
+    client = _client(api_key=api_key)
     resp = client.chat.completions.create(
-        model=settings.OPENAI_MODEL,
+        model=model,
         messages=[
             {"role": "system", "content": TOPIC_QUIZ_SYSTEM_PROMPT},
             {"role": "user", "content": user_content},
@@ -153,7 +172,12 @@ def generate_topic_quiz(course_title: str, topic_title: str, topic_content: str)
     return normalized
 
 
-def generate_quiz_advice(topic_content: str, wrong_answers_payload: List[dict]) -> Dict[int, str]:
+def generate_quiz_advice(
+    topic_content: str,
+    wrong_answers_payload: List[dict],
+    model: str,
+    api_key: Optional[str] = None,
+) -> Dict[int, str]:
     if not wrong_answers_payload:
         return {}
 
@@ -161,9 +185,9 @@ def generate_quiz_advice(topic_content: str, wrong_answers_payload: List[dict]) 
         f"Chapter content:\n{topic_content[:50000]}\n\n"
         f"Wrong answers payload:\n{json.dumps(wrong_answers_payload, ensure_ascii=False)}"
     )
-    client = _client()
+    client = _client(api_key=api_key)
     resp = client.chat.completions.create(
-        model=settings.OPENAI_MODEL,
+        model=model,
         messages=[
             {"role": "system", "content": QUIZ_ADVICE_SYSTEM_PROMPT},
             {"role": "user", "content": user_content},

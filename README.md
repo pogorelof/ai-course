@@ -21,8 +21,6 @@ Environment file (`backend/.env`):
 
 ```
 SECRET_KEY=change_me_in_production
-OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o-mini
 # Optional
 # LANGCHAIN_TRACING_V2=true
 ```
@@ -34,6 +32,32 @@ cp backend/.env.example backend/.env
 ```
 
 `SECRET_KEY` - for JWT auth. You can leave `change_me_in_production` for tests.
+
+`OPENAI_API_KEY` is no longer configured in course `.env` examples.  
+Set it in your runtime environment before backend start, for example:
+
+```bash
+export OPENAI_API_KEY=sk-...
+```
+
+Model selection is now configured per course inside the app (course settings), not through `.env`.
+
+## Per-course AI settings
+
+Each course stores its own AI provider and model.
+
+- Provider switch: `OpenAI / OpenRouter`
+- `OpenRouter` is currently disabled in UI and backend validation.
+- Active provider now: `OpenAI`
+
+Supported OpenAI models (input / output price per 1M tokens):
+
+- `gpt-5.5`: `$5` / `$30`
+- `gpt-5.4`: `$2.5` / `$15`
+- `gpt-5.4-mini`: `$0.75` / `$4.5`
+- `gpt-5.4-nano`: `$0.2` / `$1.25`
+- `gpt-5-mini`: `$0.25` / `$2`
+- `gpt-5-nano`: `$0.05` / `$0.4`
 
 SQLite database `backend/app.db` is created automatically on startup.
 
@@ -86,10 +110,14 @@ npx vitest
 - POST `/auth/register`: { username, email, password } → User
 - POST `/auth/login`: { username, password } → { access_token, token_type }
 - GET `/health`: { status: "ok" }
-- POST `/courses/outline` (auth): body `{ title, wishes }` → creates course and 15 topics with empty `content`, returns list of topics
+- POST `/courses/outline` (auth): multipart/form-data `{ title, wishes, ai_provider, ai_model, file? }` → creates course and 15 topics with empty `content`, returns list of topics
 - POST `/courses/topics/{topic_id}/generate` (auth): generates and saves `content` for a topic and returns `{ course_title, course_id, topic_id, content }`
-- GET `/courses/mine` (auth): returns array of the current user's courses, each `{ id, title }`
+- GET `/courses/mine` (auth): returns array of the current user's courses, each `{ id, title, wishes, ai_provider, ai_model, has_book, book_name, book_url }`
+- GET `/courses/{course_id}/settings` (auth): returns `{ ai_provider, ai_model }` for selected course
+- PATCH `/courses/{course_id}/settings` (auth): body `{ ai_provider, ai_model }` updates AI settings for selected course
 - GET `/courses/{course_id}/topics` (auth): returns array of topics for the given course, each `{ id, title, content|null }`
+- GET `/courses/{course_id}/book` (auth): returns attached PDF (if exists)
+- DELETE `/courses/{course_id}` (auth): deletes course and related data
 
 ## Proxy setup (OpenAI via PROXY_URL)
 

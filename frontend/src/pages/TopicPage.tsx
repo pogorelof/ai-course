@@ -5,6 +5,13 @@ import type { GeneratedTopic, TopicQuiz, TopicQuizResult } from '../types/domain
 import { PageContainer } from '../components/PageContainer'
 import { LoadingPulse } from '../components/LoadingPulse'
 import { MarkdownRenderer } from '../components/MarkdownRenderer'
+import { OpenAILogo } from '../components/OpenAILogo'
+
+const isOpenAIModel = (model: string | null | undefined) => {
+  if (!model) return false
+  const normalized = model.toLowerCase()
+  return normalized.startsWith('gpt-') || normalized.startsWith('o1') || normalized.startsWith('o3') || normalized.startsWith('o4')
+}
 
 export function TopicPage() {
   const token = typeof localStorage !== 'undefined' ? localStorage.getItem('access_token') : null
@@ -12,6 +19,7 @@ export function TopicPage() {
   const [content, setContent] = useState<string | null>(null)
   const [title, setTitle] = useState<string | null>(null)
   const [courseId, setCourseId] = useState<number | null>(null)
+  const [contentModel, setContentModel] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [quiz, setQuiz] = useState<TopicQuiz | null>(null)
@@ -29,6 +37,7 @@ export function TopicPage() {
       setContent(null)
       setTitle(null)
       setCourseId(null)
+      setContentModel(null)
       setQuiz(null)
       setQuizLoading(false)
       setQuizError(null)
@@ -39,6 +48,7 @@ export function TopicPage() {
         setTitle(data.course_title)
         setCourseId(data.course_id)
         setContent(data.content)
+        setContentModel(data.content_ai_model)
         setQuizLoading(true)
         try {
           const loadedQuiz = await CoursesAPI.topicQuiz(topicId)
@@ -105,7 +115,7 @@ export function TopicPage() {
 
   return (
     <PageContainer fullWidth>
-      <div className="section-stack" style={{ width: '100%', maxWidth: 1600, margin: '0 auto' }}>
+      <div className="section-stack" style={{ width: '100%', maxWidth: 1440, margin: '0 auto' }}>
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, paddingTop: 8 }}>
             <LoadingPulse />
@@ -113,9 +123,15 @@ export function TopicPage() {
           </div>
         ) : (
           <>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', width: '100%', maxWidth: 1500, margin: '0 auto' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', width: '100%', maxWidth: 1360, margin: '0 auto' }}>
               <div style={{ display: 'grid', gap: 6 }}>
                 <h1 className="page-hero-title">{title ? `Курс: ${title}` : 'Глава курса'}</h1>
+                {contentModel && (
+                  <div className="topic-model-inline">
+                    {isOpenAIModel(contentModel) && <OpenAILogo size={11} />}
+                    <span>{contentModel}</span>
+                  </div>
+                )}
               </div>
               {courseId && (
                 <Link to={`/courses/${courseId}`} className="btn btn-pill">
@@ -125,11 +141,11 @@ export function TopicPage() {
             </div>
             {error && <p className="status-error" style={{ textAlign: 'center' }}>{error}</p>}
             {content && (
-              <div className="surface-card surface-card--light" style={{ width: '100%', maxWidth: 1500, margin: '0 auto' }}>
+              <div className="surface-card surface-card--light" style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}>
                 <MarkdownRenderer markdown={content} />
               </div>
             )}
-            <section className="surface-card surface-card--light quiz-card" style={{ width: '100%', maxWidth: 1500, margin: '0 auto' }}>
+            <section className="surface-card surface-card--light quiz-card" style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}>
               <div className="section-stack" style={{ gap: 16 }}>
                 <div>
                   <h2 className="page-title" style={{ marginBottom: 8 }}>Тест по главе</h2>

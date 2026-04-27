@@ -60,6 +60,12 @@ export const AuthAPI = {
   async register(payload: { username: string; email: string; password: string }): Promise<void> {
     await apiFetch('/auth/register', { method: 'POST', body: payload })
   },
+  async apiKeys(): Promise<{ has_openai_key: boolean; has_openrouter_key: boolean }> {
+    return apiFetch('/auth/api-keys', { auth: true })
+  },
+  async updateApiKeys(payload: { openai_api_key?: string; openrouter_api_key?: string }): Promise<{ has_openai_key: boolean; has_openrouter_key: boolean }> {
+    return apiFetch('/auth/api-keys', { method: 'PATCH', auth: true, body: payload })
+  },
 }
 
 export const CoursesAPI = {
@@ -67,16 +73,20 @@ export const CoursesAPI = {
     id: number
     title: string
     wishes?: string | null
+    ai_provider?: 'openai' | 'openrouter'
+    ai_model?: string | null
     has_book?: boolean
     book_name?: string | null
     book_url?: string | null
   }>> {
     return apiFetch('/courses/mine', { auth: true })
   },
-  async outline(payload: { title: string; wishes: string; file?: File }): Promise<{ course_id: number; topics: Array<{ id: number; title: string }> }> {
+  async outline(payload: { title: string; wishes: string; ai_provider: 'openai' | 'openrouter'; ai_model: string; file?: File }): Promise<{ course_id: number; topics: Array<{ id: number; title: string }> }> {
     const formData = new FormData()
     formData.append('title', payload.title)
     formData.append('wishes', payload.wishes)
+    formData.append('ai_provider', payload.ai_provider)
+    formData.append('ai_model', payload.ai_model)
     if (payload.file) {
       formData.append('file', payload.file)
     }
@@ -85,13 +95,20 @@ export const CoursesAPI = {
   async courseTopics(courseId: number | string): Promise<Array<{
     id: number
     title: string
+    content_ai_model?: string | null
     last_score_percent?: number | null
     has_passed_quiz?: boolean
     has_attempts?: boolean
   }>> {
     return apiFetch(`/courses/${courseId}/topics`, { auth: true })
   },
-  async generateTopic(topicId: number | string): Promise<{ course_title: string; course_id: number; topic_id: number; content: string }> {
+  async generateTopic(topicId: number | string): Promise<{
+    course_title: string
+    course_id: number
+    topic_id: number
+    content: string
+    content_ai_model: string
+  }> {
     return apiFetch(`/courses/topics/${topicId}/generate`, { method: 'POST', auth: true })
   },
   async topicQuiz(topicId: number | string): Promise<{
@@ -176,6 +193,15 @@ export const CoursesAPI = {
   },
   async deleteCourse(courseId: number | string): Promise<void> {
     await apiFetch(`/courses/${courseId}`, { method: 'DELETE', auth: true })
+  },
+  async courseSettings(courseId: number | string): Promise<{ ai_provider: 'openai' | 'openrouter'; ai_model: string }> {
+    return apiFetch(`/courses/${courseId}/settings`, { auth: true })
+  },
+  async updateCourseSettings(
+    courseId: number | string,
+    payload: { ai_provider: 'openai' | 'openrouter'; ai_model: string }
+  ): Promise<{ ai_provider: 'openai' | 'openrouter'; ai_model: string }> {
+    return apiFetch(`/courses/${courseId}/settings`, { method: 'PATCH', auth: true, body: payload })
   },
   async fetchCourseBookBlob(courseId: number | string): Promise<Blob> {
     const token = getAccessToken()

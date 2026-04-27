@@ -1,6 +1,16 @@
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import List, Optional
 
+SUPPORTED_AI_PROVIDERS = ("openai", "openrouter")
+SUPPORTED_OPENAI_MODELS = (
+    "gpt-5.5",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.4-nano",
+    "gpt-5-mini",
+    "gpt-5-nano",
+)
+
 
 class UserCreate(BaseModel):
     username: str
@@ -38,12 +48,31 @@ class LoginInput(BaseModel):
 class CourseCreate(BaseModel):
     title: str
     wishes: str
+    ai_provider: str = "openai"
+    ai_model: str = "gpt-5-mini"
 
+    @field_validator("ai_provider")
+    @classmethod
+    def validate_ai_provider(cls, v: str) -> str:
+        normalized = v.strip().lower()
+        if normalized not in SUPPORTED_AI_PROVIDERS:
+            raise ValueError("Unsupported ai_provider")
+        return normalized
+
+    @field_validator("ai_model")
+    @classmethod
+    def validate_ai_model(cls, v: str) -> str:
+        normalized = v.strip()
+        if normalized not in SUPPORTED_OPENAI_MODELS:
+            raise ValueError("Unsupported ai_model")
+        return normalized
 
 class CourseOut(BaseModel):
     id: int
     title: str
     wishes: Optional[str] = None
+    ai_provider: str = "openai"
+    ai_model: str = "gpt-5-mini"
     has_book: bool = False
     book_name: Optional[str] = None
     book_url: Optional[str] = None
@@ -56,6 +85,7 @@ class TopicOut(BaseModel):
     id: int
     title: str
     content: Optional[str]
+    content_ai_model: Optional[str] = None
     last_score_percent: Optional[int] = None
     has_passed_quiz: bool = False
     has_attempts: bool = False
@@ -74,6 +104,7 @@ class TopicContentResponse(BaseModel):
     course_id: int
     topic_id: int
     content: str
+    content_ai_model: str
 
 
 class QuizQuestionOut(BaseModel):
@@ -118,3 +149,46 @@ class TopicQuizOut(BaseModel):
     questions: List[QuizQuestionOut]
     progress: TopicQuizProgressOut
     last_result: Optional[QuizResultOut] = None
+
+
+class CourseSettingsUpdateInput(BaseModel):
+    ai_provider: str
+    ai_model: str
+
+    @field_validator("ai_provider")
+    @classmethod
+    def validate_ai_provider(cls, v: str) -> str:
+        normalized = v.strip().lower()
+        if normalized not in SUPPORTED_AI_PROVIDERS:
+            raise ValueError("Unsupported ai_provider")
+        return normalized
+
+    @field_validator("ai_model")
+    @classmethod
+    def validate_ai_model(cls, v: str) -> str:
+        normalized = v.strip()
+        if normalized not in SUPPORTED_OPENAI_MODELS:
+            raise ValueError("Unsupported ai_model")
+        return normalized
+
+class CourseSettingsOut(BaseModel):
+    ai_provider: str
+    ai_model: str
+
+
+class UserAPIKeysUpdateInput(BaseModel):
+    openai_api_key: Optional[str] = None
+    openrouter_api_key: Optional[str] = None
+
+    @field_validator("openai_api_key", "openrouter_api_key")
+    @classmethod
+    def validate_api_keys(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        normalized = v.strip()
+        return normalized or None
+
+
+class UserAPIKeysOut(BaseModel):
+    has_openai_key: bool = False
+    has_openrouter_key: bool = False

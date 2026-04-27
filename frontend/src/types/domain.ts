@@ -2,14 +2,22 @@ export type Course = {
   id: number
   title: string
   wishes?: string | null
+  ai_provider?: 'openai' | 'openrouter'
+  ai_model?: string | null
   has_book?: boolean
   book_name?: string | null
   book_url?: string | null
 }
 
+export type CourseSettings = {
+  ai_provider: 'openai' | 'openrouter'
+  ai_model: string
+}
+
 export type Topic = {
   id: number
   title: string
+  content_ai_model?: string | null
   last_score_percent?: number | null
   has_passed_quiz?: boolean
   has_attempts?: boolean
@@ -20,6 +28,7 @@ export type GeneratedTopic = {
   course_id: number
   topic_id: number
   content: string
+  content_ai_model: string
 }
 
 export type TopicQuizQuestion = {

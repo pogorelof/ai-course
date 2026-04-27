@@ -1,7 +1,64 @@
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { AuthState } from '../types/domain'
+import { AuthAPI } from '../services/api'
 
 export function Header({ auth, onLogout }: { auth: AuthState; onLogout: () => void }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [openaiKey, setOpenaiKey] = useState('')
+  const [hasOpenAIKey, setHasOpenAIKey] = useState(false)
+  const [loadingKeys, setLoadingKeys] = useState(false)
+  const [savingKeys, setSavingKeys] = useState(false)
+  const [keyStatus, setKeyStatus] = useState<string | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const onClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [menuOpen])
+
+  const openApiKeysMenu = async () => {
+    setMenuOpen(prev => !prev)
+    if (menuOpen || !auth.isAuthenticated) return
+    setLoadingKeys(true)
+    setKeyStatus(null)
+    setOpenaiKey('')
+    try {
+      const keys = await AuthAPI.apiKeys()
+      setHasOpenAIKey(Boolean(keys.has_openai_key))
+    } catch {
+      setKeyStatus('Не удалось загрузить статус ключей')
+    } finally {
+      setLoadingKeys(false)
+    }
+  }
+
+  const saveApiKeys = async () => {
+    const trimmed = openaiKey.trim()
+    if (!trimmed) {
+      setKeyStatus('Введите OpenAI API key')
+      return
+    }
+    setSavingKeys(true)
+    setKeyStatus(null)
+    try {
+      const updated = await AuthAPI.updateApiKeys({ openai_api_key: trimmed })
+      setHasOpenAIKey(Boolean(updated.has_openai_key))
+      setOpenaiKey('')
+      setKeyStatus('Ключ сохранен')
+    } catch {
+      setKeyStatus('Не удалось сохранить ключ')
+    } finally {
+      setSavingKeys(false)
+    }
+  }
+
   return (
     <header
       style={{
@@ -40,8 +97,40 @@ export function Header({ auth, onLogout }: { auth: AuthState; onLogout: () => vo
           Courses
         </Link>
         {auth.isAuthenticated ? (
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', position: 'relative' }} ref={menuRef}>
             <span style={{ color: 'rgba(0, 0, 0, 0.8)', fontSize: 12, lineHeight: 1.33, letterSpacing: '-0.12px' }}>Привет, {auth.username}</span>
+            <button onClick={openApiKeysMenu} className="btn btn-secondary">
+              Ключи API
+            </button>
+            {menuOpen && (
+              <div className="api-keys-popover">
+                <div className="field">
+                  <span>OpenAI API key</span>
+                  <input
+                    value={openaiKey}
+                    onChange={(e) => setOpenaiKey(e.target.value)}
+                    className="input"
+                    type="password"
+                    placeholder={hasOpenAIKey ? 'Ключ уже сохранен, введите новый' : 'sk-...'}
+                    autoComplete="off"
+                    disabled={loadingKeys || savingKeys}
+                  />
+                </div>
+                <div className="field">
+                  <span style={{ color: 'var(--color-text-tertiary)' }}>OpenRouter API key (скоро)</span>
+                  <input
+                    className="input"
+                    type="password"
+                    placeholder="Недоступно"
+                    disabled
+                  />
+                </div>
+                {keyStatus && <p className="status-muted">{keyStatus}</p>}
+                <button onClick={saveApiKeys} className="btn btn-primary" disabled={loadingKeys || savingKeys}>
+                  {savingKeys ? 'Сохраняем...' : 'Сохранить'}
+                </button>
+              </div>
+            )}
             <button onClick={onLogout} className="btn btn-secondary">
               Выйти
             </button>
