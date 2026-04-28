@@ -1,24 +1,26 @@
-from datetime import datetime
-from typing import List, Optional
+import asyncio
+import json
 import logging
 import os
-import uuid
 import shutil
+import uuid
+from datetime import datetime, timedelta
+from typing import AsyncIterator, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, File, Form, UploadFile
-from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse, StreamingResponse
+from openai import OpenAIError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from openai import OpenAIError
+from sqlalchemy.orm import Session
 
-from ..db import get_db
 from ..core.security import get_current_user
+from ..db import SessionLocal, get_db
 from ..models import (
     Course,
     CourseAISettings,
     CourseContentSettings,
-    UserAPIKeys,
+    CourseGenerationJob,
     CourseTopic,
     TopicContentGeneration,
     TopicHtmlContent,
@@ -27,23 +29,25 @@ from ..models import (
     TopicQuizAttemptAnswer,
     TopicQuizQuestion,
     TopicQuizQuestionAdvice,
+    UserAPIKeys,
 )
 from ..schemas import (
     CourseCreate,
+    CourseGenerationJobOut,
+    CourseOut,
+    CourseOutlineResponse,
     CourseSettingsOut,
     CourseSettingsUpdateInput,
-    CourseOutlineResponse,
-    CourseOut,
+    QuizQuestionOut,
     QuizResultOut,
     QuizSubmitInput,
     QuizWrongAdviceOut,
     TopicContentResponse,
-    TopicMetaOut,
     TopicHtmlContentOut,
+    TopicMetaOut,
     TopicOut,
     TopicQuizOut,
     TopicQuizProgressOut,
-    QuizQuestionOut,
 )
 from ..services.ai import (
     extract_text_from_pdf,
@@ -51,6 +55,9 @@ from ..services.ai import (
     generate_topic_content,
     generate_topic_html,
     generate_topic_quiz,
+    stream_topic_content,
+    stream_topic_html,
+    validate_html_document,
 )
 
 
@@ -60,6 +67,7 @@ PASSING_SCORE_PERCENT = 60
 ACTIVE_AI_PROVIDERS = {"openai", "openrouter"}
 LEGACY_DEFAULT_CONTENT_MODEL = "gpt-4o-mini"
 LEGACY_DEFAULT_COURSE_MODEL = "gpt-4o-mini"
+ACTIVE_JOB_STATUSES = {"pending", "running"}
 
 
 def _assert_active_ai_provider(ai_provider: str) -> None:
@@ -79,6 +87,13 @@ def _resolve_course_ai_settings(course: Course, db: Session) -> tuple[str, str]:
     if settings:
         return settings.ai_provider, settings.ai_model
     return "openai", "gpt-5-mini"
+
+
+def _resolve_course_reasoning_effort(course: Course, db: Session) -> str:
+    settings = _get_course_ai_settings(course, db)
+    if settings and settings.reasoning_effort:
+        return settings.reasoning_effort
+    return "minimal"
 
 
 def _get_course_content_settings(course: Course, db: Session) -> Optional[CourseContentSettings]:
@@ -111,15 +126,27 @@ def _require_user_api_key(user_id: int, provider: str, db: Session) -> str:
     return api_key
 
 
-def _upsert_course_ai_settings(course: Course, db: Session, ai_provider: str, ai_model: str) -> CourseAISettings:
+def _upsert_course_ai_settings(
+    course: Course,
+    db: Session,
+    ai_provider: str,
+    ai_model: str,
+    reasoning_effort: str = "minimal",
+) -> CourseAISettings:
     settings = db.scalar(select(CourseAISettings).where(CourseAISettings.course_id == course.id))
     if not settings:
-        settings = CourseAISettings(course_id=course.id, ai_provider=ai_provider, ai_model=ai_model)
+        settings = CourseAISettings(
+            course_id=course.id,
+            ai_provider=ai_provider,
+            ai_model=ai_model,
+            reasoning_effort=reasoning_effort,
+        )
         db.add(settings)
         db.flush()
         return settings
     settings.ai_provider = ai_provider
     settings.ai_model = ai_model
+    settings.reasoning_effort = reasoning_effort
     db.add(settings)
     return settings
 
@@ -174,15 +201,16 @@ def _upsert_topic_html_content(topic_id: int, html: str, ai_provider: str, ai_mo
 
 
 @router.post("/outline", response_model=CourseOutlineResponse)
-def create_outline(
+async def create_outline(
     title: str = Form(...),
     wishes: str = Form(...),
     ai_provider: str = Form("openai"),
     ai_model: str = Form("gpt-5-mini"),
     content_format: str = Form("text"),
+    reasoning_effort: str = Form("minimal"),
     file: UploadFile = File(None),
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
 ):
     validated_payload = CourseCreate(
         title=title,
@@ -190,6 +218,7 @@ def create_outline(
         ai_provider=ai_provider,
         ai_model=ai_model,
         content_format=content_format,
+        reasoning_effort=reasoning_effort,
     )
     _assert_active_ai_provider(validated_payload.ai_provider)
     user_api_key = _require_user_api_key(current_user.id, validated_payload.ai_provider, db)
@@ -197,51 +226,36 @@ def create_outline(
     pdf_text = None
     pdf_path = None
 
-    print(f"Received outline request. Title: {title}, File provided: {file is not None}")
-
     if file:
-        print(f"File content type: {file.content_type}, Filename: {file.filename}")
         if file.content_type != "application/pdf":
-             raise HTTPException(status_code=400, detail="Only PDF files are allowed")
-        
-        # Use absolute path relative to this file to ensure correct location
-        # This file is in backend/app/routers/
-        # We want backend/uploads/
-        current_file_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_file_dir))) # Go up to project root? No, let's go to backend root.
-        # backend/app/routers -> backend/app -> backend -> ...
-        # actually, let's assume the standard structure: backend/ is where we want uploads.
-        
+            raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+
         backend_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         upload_dir = os.path.join(backend_root, "uploads")
-        
         os.makedirs(upload_dir, exist_ok=True)
-        
+
         file_extension = os.path.splitext(file.filename)[1]
         unique_filename = f"{uuid.uuid4()}{file_extension}"
         file_path = os.path.join(upload_dir, unique_filename)
-        
-        print(f"Saving file to: {file_path}")
-        
+
         try:
             with open(file_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
-            print("File saved successfully.")
         except Exception as e:
-            print(f"Error saving file: {e}")
             raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
-            
+
         pdf_path = file_path
         pdf_text = extract_text_from_pdf(file_path)
 
     try:
-        titles = generate_course_outline(
+        titles = await generate_course_outline(
             validated_payload.title,
             validated_payload.wishes,
             model=validated_payload.ai_model,
             provider=validated_payload.ai_provider,
             pdf_text=pdf_text,
             api_key=user_api_key,
+            reasoning_effort=validated_payload.reasoning_effort,
         )
     except OpenAIError as e:
         logger.exception(
@@ -267,7 +281,13 @@ def create_outline(
     )
     db.add(course)
     db.flush()
-    _upsert_course_ai_settings(course, db, validated_payload.ai_provider, validated_payload.ai_model)
+    _upsert_course_ai_settings(
+        course,
+        db,
+        validated_payload.ai_provider,
+        validated_payload.ai_model,
+        validated_payload.reasoning_effort,
+    )
     _upsert_course_content_settings(course, db, validated_payload.content_format)
 
     topics: list[CourseTopic] = []
@@ -284,7 +304,7 @@ def create_outline(
 
 
 @router.post("/topics/{topic_id}/generate", response_model=TopicContentResponse)
-def generate_content(topic_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+async def generate_content(topic_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     topic = db.scalar(select(CourseTopic).where(CourseTopic.id == topic_id))
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -295,7 +315,6 @@ def generate_content(topic_id: int, db: Session = Depends(get_db), current_user=
     ai_provider, ai_model = _resolve_course_ai_settings(course, db)
     _assert_active_ai_provider(ai_provider)
 
-    # If content already exists, return it as-is
     if topic.content and topic.content.strip():
         model_name = _resolve_topic_content_model(topic, db) or LEGACY_DEFAULT_CONTENT_MODEL
         return TopicContentResponse(
@@ -306,14 +325,14 @@ def generate_content(topic_id: int, db: Session = Depends(get_db), current_user=
             content_ai_model=model_name,
         )
 
-    # Otherwise, generate and save
     pdf_text = None
     if course.pdf_path and os.path.exists(course.pdf_path):
-         pdf_text = extract_text_from_pdf(course.pdf_path)
+        pdf_text = extract_text_from_pdf(course.pdf_path)
     api_key = _require_user_api_key(current_user.id, ai_provider, db)
+    reasoning_effort = _resolve_course_reasoning_effort(course, db)
 
     try:
-        content = generate_topic_content(
+        content = await generate_topic_content(
             course.title,
             course.wishes,
             topic.title,
@@ -321,6 +340,7 @@ def generate_content(topic_id: int, db: Session = Depends(get_db), current_user=
             provider=ai_provider,
             pdf_text=pdf_text,
             api_key=api_key,
+            reasoning_effort=reasoning_effort,
         )
     except OpenAIError as e:
         logger.exception(
@@ -349,6 +369,129 @@ def generate_content(topic_id: int, db: Session = Depends(get_db), current_user=
         content=topic.content or "",
         content_ai_model=ai_model,
     )
+
+
+def _sse_pack(event: dict) -> bytes:
+    """Serialize an event as a single NDJSON line.
+
+    We deliberately use newline-delimited JSON instead of the SSE wire format
+    so the client can use a plain ``fetch`` with auth headers (EventSource
+    cannot send custom headers) and parse each line as JSON.
+    """
+    return (json.dumps(event, ensure_ascii=False) + "\n").encode("utf-8")
+
+
+@router.post("/topics/{topic_id}/generate/stream")
+async def generate_content_stream(
+    topic_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    topic = db.scalar(select(CourseTopic).where(CourseTopic.id == topic_id))
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    course = db.scalar(select(Course).where(Course.id == topic.course_id))
+    if not course or course.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    ai_provider, ai_model = _resolve_course_ai_settings(course, db)
+    _assert_active_ai_provider(ai_provider)
+    api_key = _require_user_api_key(current_user.id, ai_provider, db)
+
+    cached_content = topic.content if (topic.content and topic.content.strip()) else None
+    cached_model = _resolve_topic_content_model(topic, db) if cached_content else None
+
+    pdf_text = None
+    if course.pdf_path and os.path.exists(course.pdf_path):
+        pdf_text = extract_text_from_pdf(course.pdf_path)
+    reasoning_effort = _resolve_course_reasoning_effort(course, db)
+
+    course_title = course.title
+    course_wishes = course.wishes
+    topic_title = topic.title
+    topic_id_value = topic.id
+    course_id_value = course.id
+
+    async def event_stream() -> AsyncIterator[bytes]:
+        yield _sse_pack(
+            {
+                "type": "started",
+                "topic_id": topic_id_value,
+                "course_id": course_id_value,
+                "ai_model": ai_model,
+                "ai_provider": ai_provider,
+                "course_title": course_title,
+            }
+        )
+        if cached_content is not None:
+            yield _sse_pack(
+                {
+                    "type": "cached",
+                    "content": cached_content,
+                    "ai_model": cached_model or LEGACY_DEFAULT_CONTENT_MODEL,
+                }
+            )
+            yield _sse_pack({"type": "done", "from_cache": True})
+            return
+
+        accumulator: list[str] = []
+        try:
+            async for piece in stream_topic_content(
+                course_title,
+                course_wishes,
+                topic_title,
+                model=ai_model,
+                provider=ai_provider,
+                pdf_text=pdf_text,
+                api_key=api_key,
+                reasoning_effort=reasoning_effort,
+            ):
+                accumulator.append(piece)
+                yield _sse_pack({"type": "chunk", "delta": piece})
+        except OpenAIError as exc:
+            logger.exception("Streaming content failed: %s", exc)
+            yield _sse_pack({"type": "error", "detail": str(exc)})
+            return
+        except Exception as exc:
+            logger.exception("Streaming content failed unexpectedly: %s", exc)
+            yield _sse_pack({"type": "error", "detail": "internal error"})
+            return
+
+        full_text = "".join(accumulator).strip()
+        if not full_text:
+            yield _sse_pack({"type": "error", "detail": "empty content from model"})
+            return
+
+        try:
+            persist_session = SessionLocal()
+            try:
+                stored_topic = persist_session.scalar(
+                    select(CourseTopic).where(CourseTopic.id == topic_id_value)
+                )
+                if stored_topic and (not stored_topic.content or not stored_topic.content.strip()):
+                    stored_topic.content = full_text
+                    persist_session.add(stored_topic)
+                    _upsert_topic_content_generation(
+                        stored_topic.id, ai_provider, ai_model, persist_session
+                    )
+                    persist_session.commit()
+            finally:
+                persist_session.close()
+        except Exception as exc:
+            logger.exception("Failed to persist streamed content: %s", exc)
+            yield _sse_pack({"type": "error", "detail": "failed to persist content"})
+            return
+
+        yield _sse_pack(
+            {
+                "type": "done",
+                "from_cache": False,
+                "content": full_text,
+                "ai_model": ai_model,
+            }
+        )
+
+    return StreamingResponse(event_stream(), media_type="application/x-ndjson")
 
 
 def _get_topic_and_course_or_404(topic_id: int, db: Session, user_id: int) -> tuple[CourseTopic, Course]:
@@ -425,7 +568,7 @@ def _serialize_quiz(quiz: TopicQuiz, db: Session, user_id: int) -> TopicQuizOut:
 
 
 @router.post("/topics/{topic_id}/quiz/generate", response_model=TopicQuizOut)
-def generate_topic_quiz_endpoint(topic_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+async def generate_topic_quiz_endpoint(topic_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     topic, course = _get_topic_and_course_or_404(topic_id, db, current_user.id)
     ai_provider, ai_model = _resolve_course_ai_settings(course, db)
     _assert_active_ai_provider(ai_provider)
@@ -438,13 +581,14 @@ def generate_topic_quiz_endpoint(topic_id: int, db: Session = Depends(get_db), c
     api_key = _require_user_api_key(current_user.id, ai_provider, db)
 
     try:
-        generated_questions = generate_topic_quiz(
+        generated_questions = await generate_topic_quiz(
             course_title=course.title,
             topic_title=topic.title,
             topic_content=topic.content,
             model=ai_model,
             provider=ai_provider,
             api_key=api_key,
+            reasoning_effort=_resolve_course_reasoning_effort(course, db),
         )
     except OpenAIError as e:
         logger.exception(
@@ -463,7 +607,6 @@ def generate_topic_quiz_endpoint(topic_id: int, db: Session = Depends(get_db), c
     try:
         db.flush()
     except IntegrityError:
-        # Parallel request could create quiz first.
         db.rollback()
         existing_quiz = db.scalar(select(TopicQuiz).where(TopicQuiz.topic_id == topic.id))
         if existing_quiz:
@@ -650,7 +793,7 @@ def get_topic_html(topic_id: int, db: Session = Depends(get_db), current_user=De
 
 
 @router.post("/topics/{topic_id}/content/html", response_model=TopicHtmlContentOut)
-def generate_topic_html_endpoint(
+async def generate_topic_html_endpoint(
     topic_id: int,
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
@@ -663,9 +806,10 @@ def generate_topic_html_endpoint(
     pdf_text = None
     if course.pdf_path and os.path.exists(course.pdf_path):
         pdf_text = extract_text_from_pdf(course.pdf_path)
+    reasoning_effort = _resolve_course_reasoning_effort(course, db)
 
     try:
-        html = generate_topic_html(
+        html = await generate_topic_html(
             course_title=course.title,
             wishes=course.wishes,
             topic_title=topic.title,
@@ -673,6 +817,7 @@ def generate_topic_html_endpoint(
             provider=ai_provider,
             pdf_text=pdf_text,
             api_key=api_key,
+            reasoning_effort=reasoning_effort,
         )
     except OpenAIError as e:
         logger.exception(
@@ -704,6 +849,96 @@ def generate_topic_html_endpoint(
     )
 
 
+@router.post("/topics/{topic_id}/content/html/stream")
+async def generate_topic_html_stream(
+    topic_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    topic, course = _get_topic_and_course_or_404(topic_id, db, current_user.id)
+    ai_provider, ai_model = _resolve_course_ai_settings(course, db)
+    _assert_active_ai_provider(ai_provider)
+    api_key = _require_user_api_key(current_user.id, ai_provider, db)
+
+    pdf_text = None
+    if course.pdf_path and os.path.exists(course.pdf_path):
+        pdf_text = extract_text_from_pdf(course.pdf_path)
+    reasoning_effort = _resolve_course_reasoning_effort(course, db)
+
+    course_title = course.title
+    course_wishes = course.wishes
+    topic_title = topic.title
+    topic_id_value = topic.id
+    course_id_value = course.id
+
+    async def event_stream() -> AsyncIterator[bytes]:
+        yield _sse_pack(
+            {
+                "type": "started",
+                "topic_id": topic_id_value,
+                "course_id": course_id_value,
+                "ai_model": ai_model,
+                "ai_provider": ai_provider,
+                "course_title": course_title,
+            }
+        )
+        accumulator: list[str] = []
+        try:
+            async for piece in stream_topic_html(
+                course_title,
+                course_wishes,
+                topic_title,
+                model=ai_model,
+                provider=ai_provider,
+                pdf_text=pdf_text,
+                api_key=api_key,
+                reasoning_effort=reasoning_effort,
+            ):
+                accumulator.append(piece)
+                yield _sse_pack({"type": "chunk", "delta": piece})
+        except OpenAIError as exc:
+            logger.exception("Streaming HTML failed: %s", exc)
+            yield _sse_pack({"type": "error", "detail": str(exc)})
+            return
+        except Exception as exc:
+            logger.exception("Streaming HTML failed unexpectedly: %s", exc)
+            yield _sse_pack({"type": "error", "detail": "internal error"})
+            return
+
+        full_text = "".join(accumulator)
+        try:
+            html = validate_html_document(full_text, "generate_topic_html_stream")
+        except OpenAIError as exc:
+            yield _sse_pack({"type": "error", "detail": str(exc)})
+            return
+
+        try:
+            persist_session = SessionLocal()
+            try:
+                record = _upsert_topic_html_content(topic_id_value, html, ai_provider, ai_model, persist_session)
+                persist_session.commit()
+                persist_session.refresh(record)
+                generated_at = record.generated_at.isoformat() if record.generated_at else None
+            finally:
+                persist_session.close()
+        except Exception as exc:
+            logger.exception("Failed to persist streamed HTML: %s", exc)
+            yield _sse_pack({"type": "error", "detail": "failed to persist html"})
+            return
+
+        yield _sse_pack(
+            {
+                "type": "done",
+                "html": html,
+                "ai_provider": ai_provider,
+                "ai_model": ai_model,
+                "generated_at": generated_at,
+            }
+        )
+
+    return StreamingResponse(event_stream(), media_type="application/x-ndjson")
+
+
 @router.get("/mine", response_model=List[CourseOut])
 def list_my_courses(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     courses = db.scalars(select(Course).where(Course.owner_id == current_user.id)).all()
@@ -714,7 +949,6 @@ def list_my_courses(db: Session = Depends(get_db), current_user=Depends(get_curr
         if ai_settings:
             ai_provider, ai_model = ai_settings.ai_provider, ai_settings.ai_model
         else:
-            # Legacy courses (created before per-course AI settings) were generated with gpt-4o-mini.
             ai_provider, ai_model = "openai", LEGACY_DEFAULT_COURSE_MODEL
         has_book = bool(course.pdf_path and os.path.exists(course.pdf_path))
         book_name = os.path.basename(course.pdf_path) if has_book and course.pdf_path else None
@@ -743,7 +977,13 @@ def get_course_settings(course_id: int, db: Session = Depends(get_db), current_u
         raise HTTPException(status_code=403, detail="Forbidden")
     ai_provider, ai_model = _resolve_course_ai_settings(course, db)
     content_format = _resolve_course_content_format(course, db)
-    return CourseSettingsOut(ai_provider=ai_provider, ai_model=ai_model, content_format=content_format)
+    reasoning_effort = _resolve_course_reasoning_effort(course, db)
+    return CourseSettingsOut(
+        ai_provider=ai_provider,
+        ai_model=ai_model,
+        content_format=content_format,
+        reasoning_effort=reasoning_effort,
+    )
 
 
 @router.patch("/{course_id}/settings", response_model=CourseSettingsOut)
@@ -757,7 +997,13 @@ def update_course_settings(
     if not course or course.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Forbidden")
     _assert_active_ai_provider(payload.ai_provider)
-    course_ai_settings = _upsert_course_ai_settings(course, db, payload.ai_provider, payload.ai_model)
+    course_ai_settings = _upsert_course_ai_settings(
+        course,
+        db,
+        payload.ai_provider,
+        payload.ai_model,
+        payload.reasoning_effort,
+    )
     course_content_settings = _upsert_course_content_settings(course, db, payload.content_format)
     db.commit()
     db.refresh(course_ai_settings)
@@ -766,6 +1012,7 @@ def update_course_settings(
         ai_provider=course_ai_settings.ai_provider,
         ai_model=course_ai_settings.ai_model,
         content_format=course_content_settings.content_format,
+        reasoning_effort=course_ai_settings.reasoning_effort,
     )
 
 
@@ -842,3 +1089,281 @@ def list_course_topics(course_id: int, db: Session = Depends(get_db), current_us
             )
         )
     return result
+
+
+# ---------------------------------------------------------------------------
+# Background queue: generate every topic of a course in the background.
+# Multiple courses can run in parallel; only one active job per course.
+# ---------------------------------------------------------------------------
+
+
+def _serialize_job(job: CourseGenerationJob, course_title: Optional[str]) -> CourseGenerationJobOut:
+    return CourseGenerationJobOut(
+        id=job.id,
+        course_id=job.course_id,
+        course_title=course_title or "",
+        status=job.status,
+        total=job.total,
+        completed=job.completed,
+        current_topic_id=job.current_topic_id,
+        current_topic_title=job.current_topic_title,
+        content_format=job.content_format,
+        ai_provider=job.ai_provider,
+        ai_model=job.ai_model,
+        error_message=job.error_message,
+        created_at=job.created_at,
+        updated_at=job.updated_at,
+    )
+
+
+def _job_is_active(job: CourseGenerationJob) -> bool:
+    return job.status in ACTIVE_JOB_STATUSES
+
+
+async def _run_course_queue(job_id: int) -> None:
+    """Background coroutine that generates every missing artifact for a course."""
+
+    def _open_session() -> Session:
+        return SessionLocal()
+
+    db = _open_session()
+    try:
+        job = db.scalar(select(CourseGenerationJob).where(CourseGenerationJob.id == job_id))
+        if not job:
+            return
+        course = db.scalar(select(Course).where(Course.id == job.course_id))
+        if not course:
+            job.status = "error"
+            job.error_message = "Course not found"
+            db.add(job)
+            db.commit()
+            return
+
+        api_key = _resolve_user_api_key(job.user_id, job.ai_provider, db)
+        if not api_key or not api_key.strip():
+            job.status = "error"
+            job.error_message = f"{job.ai_provider} API key is not set"
+            db.add(job)
+            db.commit()
+            return
+
+        topics = db.scalars(
+            select(CourseTopic).where(CourseTopic.course_id == course.id).order_by(CourseTopic.id.asc())
+        ).all()
+
+        pdf_text = None
+        if course.pdf_path and os.path.exists(course.pdf_path):
+            pdf_text = extract_text_from_pdf(course.pdf_path)
+
+        course_title = course.title
+        course_wishes = course.wishes
+        ai_provider = job.ai_provider
+        ai_model = job.ai_model
+        content_format = job.content_format
+        reasoning_effort = _resolve_course_reasoning_effort(course, db)
+
+        job.status = "running"
+        job.total = len(topics)
+        job.completed = 0
+        job.current_topic_id = None
+        job.current_topic_title = None
+        job.error_message = None
+        job.updated_at = datetime.utcnow()
+        db.add(job)
+        db.commit()
+
+        for topic in topics:
+            db.refresh(job)
+            if job.status == "cancelled":
+                return
+
+            job.current_topic_id = topic.id
+            job.current_topic_title = topic.title
+            job.updated_at = datetime.utcnow()
+            db.add(job)
+            db.commit()
+
+            try:
+                if content_format == "interactive":
+                    has_html = db.scalar(
+                        select(TopicHtmlContent.id).where(TopicHtmlContent.topic_id == topic.id)
+                    )
+                    if not has_html:
+                        html = await generate_topic_html(
+                            course_title=course_title,
+                            wishes=course_wishes,
+                            topic_title=topic.title,
+                            model=ai_model,
+                            provider=ai_provider,
+                            pdf_text=pdf_text,
+                            api_key=api_key,
+                            reasoning_effort=reasoning_effort,
+                        )
+                        _upsert_topic_html_content(topic.id, html, ai_provider, ai_model, db)
+                        db.commit()
+                else:
+                    if not topic.content or not topic.content.strip():
+                        content = await generate_topic_content(
+                            course_title,
+                            course_wishes,
+                            topic.title,
+                            model=ai_model,
+                            provider=ai_provider,
+                            pdf_text=pdf_text,
+                            api_key=api_key,
+                            reasoning_effort=reasoning_effort,
+                        )
+                        topic.content = content
+                        db.add(topic)
+                        _upsert_topic_content_generation(topic.id, ai_provider, ai_model, db)
+                        db.commit()
+            except OpenAIError as exc:
+                logger.exception("Queue topic generation failed: %s", exc)
+                job.status = "error"
+                job.error_message = str(exc)
+                job.updated_at = datetime.utcnow()
+                db.add(job)
+                db.commit()
+                return
+            except Exception as exc:
+                logger.exception("Queue topic generation crashed: %s", exc)
+                job.status = "error"
+                job.error_message = f"internal error: {exc}"
+                job.updated_at = datetime.utcnow()
+                db.add(job)
+                db.commit()
+                return
+
+            job.completed += 1
+            job.updated_at = datetime.utcnow()
+            db.add(job)
+            db.commit()
+
+        job.status = "done"
+        job.current_topic_id = None
+        job.current_topic_title = None
+        job.updated_at = datetime.utcnow()
+        db.add(job)
+        db.commit()
+    finally:
+        db.close()
+
+
+def _spawn_queue_job(job_id: int) -> None:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    loop.create_task(_run_course_queue(job_id))
+
+
+@router.post("/{course_id}/queue", response_model=CourseGenerationJobOut)
+async def enqueue_course_generation(
+    course_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    course = db.scalar(select(Course).where(Course.id == course_id))
+    if not course or course.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    ai_provider, ai_model = _resolve_course_ai_settings(course, db)
+    _assert_active_ai_provider(ai_provider)
+    content_format = _resolve_course_content_format(course, db)
+    _require_user_api_key(current_user.id, ai_provider, db)
+
+    existing = db.scalar(
+        select(CourseGenerationJob)
+        .where(
+            CourseGenerationJob.course_id == course.id,
+            CourseGenerationJob.user_id == current_user.id,
+            CourseGenerationJob.status.in_(list(ACTIVE_JOB_STATUSES)),
+        )
+        .order_by(CourseGenerationJob.created_at.desc())
+    )
+    if existing:
+        return _serialize_job(existing, course.title)
+
+    topic_count = db.scalar(
+        select(CourseTopic).where(CourseTopic.course_id == course.id).order_by(CourseTopic.id.asc()).limit(1)
+    )
+    if topic_count is None:
+        raise HTTPException(status_code=400, detail="Course has no topics yet")
+
+    total_topics = len(
+        db.scalars(select(CourseTopic.id).where(CourseTopic.course_id == course.id)).all()
+    )
+
+    job = CourseGenerationJob(
+        course_id=course.id,
+        user_id=current_user.id,
+        status="pending",
+        total=total_topics,
+        completed=0,
+        content_format=content_format,
+        ai_provider=ai_provider,
+        ai_model=ai_model,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    _spawn_queue_job(job.id)
+    return _serialize_job(job, course.title)
+
+
+@router.get("/queues", response_model=List[CourseGenerationJobOut])
+def list_my_queues(
+    include_finished: bool = False,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    stmt = select(CourseGenerationJob).where(CourseGenerationJob.user_id == current_user.id)
+    if not include_finished:
+        cutoff = datetime.utcnow() - timedelta(minutes=5)
+        stmt = stmt.where(
+            (CourseGenerationJob.status.in_(list(ACTIVE_JOB_STATUSES)))
+            | (CourseGenerationJob.updated_at >= cutoff)
+        )
+    stmt = stmt.order_by(CourseGenerationJob.created_at.desc())
+    jobs = db.scalars(stmt).all()
+    if not jobs:
+        return []
+    course_titles: dict[int, str] = {}
+    course_ids = list({job.course_id for job in jobs})
+    if course_ids:
+        for course in db.scalars(select(Course).where(Course.id.in_(course_ids))).all():
+            course_titles[course.id] = course.title
+    return [_serialize_job(job, course_titles.get(job.course_id)) for job in jobs]
+
+
+@router.get("/{course_id}/queue", response_model=Optional[CourseGenerationJobOut])
+def get_course_queue(course_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    course = db.scalar(select(Course).where(Course.id == course_id))
+    if not course or course.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    job = db.scalar(
+        select(CourseGenerationJob)
+        .where(CourseGenerationJob.course_id == course.id, CourseGenerationJob.user_id == current_user.id)
+        .order_by(CourseGenerationJob.created_at.desc())
+    )
+    if not job:
+        return None
+    return _serialize_job(job, course.title)
+
+
+@router.delete("/queues/{job_id}", response_model=CourseGenerationJobOut)
+def cancel_queue_job(job_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    job = db.scalar(select(CourseGenerationJob).where(CourseGenerationJob.id == job_id))
+    if not job or job.user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.status in {"done", "error", "cancelled"}:
+        course = db.scalar(select(Course).where(Course.id == job.course_id))
+        return _serialize_job(job, course.title if course else None)
+    job.status = "cancelled"
+    job.updated_at = datetime.utcnow()
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    course = db.scalar(select(Course).where(Course.id == job.course_id))
+    return _serialize_job(job, course.title if course else None)

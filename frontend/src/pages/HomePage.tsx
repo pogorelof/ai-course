@@ -40,6 +40,8 @@ export function HomePage() {
   const [deletingCourseId, setDeletingCourseId] = useState<number | null>(null)
   const [openingBookCourseId, setOpeningBookCourseId] = useState<number | null>(null)
   const [bookCovers, setBookCovers] = useState<Record<number, string>>({})
+  const [enqueuingCourseId, setEnqueuingCourseId] = useState<number | null>(null)
+  const [enqueueError, setEnqueueError] = useState<string | null>(null)
 
   const fetchCourses = async () => {
     if (!token) return
@@ -97,6 +99,28 @@ export function HomePage() {
     }
   }
 
+  const handleEnqueueCourse = async (courseId: number) => {
+    if (enqueuingCourseId) return
+    const course = courses.find(item => item.id === courseId)
+    const courseLabel = course?.title ? `«${course.title}»` : `курс #${courseId}`
+    const confirmed = window.confirm(
+      `Запустить фоновую генерацию для ${courseLabel}?\n\n` +
+        'Будут вызваны OpenAI/OpenRouter для каждой темы курса (до 15 запросов). ' +
+        'Это потратит токены на вашем API-ключе. Продолжить?'
+    )
+    if (!confirmed) return
+    setEnqueuingCourseId(courseId)
+    setEnqueueError(null)
+    try {
+      await CoursesAPI.enqueueCourseGeneration(courseId)
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : 'Не удалось запустить очередь'
+      setEnqueueError(detail || 'Не удалось запустить очередь')
+    } finally {
+      setEnqueuingCourseId(null)
+    }
+  }
+
   const handleOpenBook = async (courseId: number) => {
     if (openingBookCourseId) return
     setOpeningBookCourseId(courseId)
@@ -135,6 +159,7 @@ export function HomePage() {
               </div>
             )}
             {error && <p className="status-error">{error}</p>}
+            {enqueueError && <p className="status-error">{enqueueError}</p>}
             {!loading && !error && courses.length === 0 && <p className="status-muted">Курсов пока нет. Начните с создания нового.</p>}
             <ul className="list-stack">
               {courses.map((c) => (
@@ -154,6 +179,15 @@ export function HomePage() {
                       <Link to={`/courses/${c.id}`} className="btn btn-pill">
                         Открыть
                       </Link>
+                      <button
+                        type="button"
+                        className="btn btn-pill btn-pill-queue"
+                        disabled={enqueuingCourseId === c.id}
+                        onClick={() => handleEnqueueCourse(c.id)}
+                        title="Сгенерировать все главы в фоне с прогресс-баром"
+                      >
+                        {enqueuingCourseId === c.id ? 'Запускаем...' : 'Сгенерировать весь курс сразу'}
+                      </button>
                       <button
                         type="button"
                         className="btn btn-pill btn-pill-delete"

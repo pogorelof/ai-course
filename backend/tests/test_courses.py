@@ -1,5 +1,5 @@
 from fastapi.testclient import TestClient
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from openai import OpenAIError
 from sqlalchemy import select
 
@@ -9,6 +9,17 @@ from app.models import (
     TopicQuizAttempt,
     TopicQuizAttemptAnswer,
 )
+
+
+def patch_async(target, *, return_value=None, side_effect=None):
+    """Patch an async function with an ``AsyncMock`` so ``await`` works."""
+
+    kwargs: dict = {"new_callable": AsyncMock}
+    if return_value is not None:
+        kwargs["return_value"] = return_value
+    if side_effect is not None:
+        kwargs["side_effect"] = side_effect
+    return patch(target, **kwargs)
 
 
 SAMPLE_HTML_DOCUMENT = (
@@ -21,7 +32,7 @@ SAMPLE_HTML_DOCUMENT = (
 
 
 def test_create_outline_creates_15_topics(client: TestClient, auth_headers):
-    with patch("app.routers.courses.generate_course_outline", return_value=[f"Topic {i+1}" for i in range(15)]):
+    with patch_async("app.routers.courses.generate_course_outline", return_value=[f"Topic {i+1}" for i in range(15)]):
         r = client.post("/courses/outline", data={"title": "Python", "wishes": "Basics"}, headers=auth_headers())
     assert r.status_code == 200
     data = r.json()
@@ -31,14 +42,14 @@ def test_create_outline_creates_15_topics(client: TestClient, auth_headers):
 
 def test_generate_topic_content_first_time_and_idempotent(client: TestClient, auth_headers):
     # Prepare a course with outline
-    with patch("app.routers.courses.generate_course_outline", return_value=["Intro", "Types", "Control flow"] + [f"T{i}" for i in range(12)]):
+    with patch_async("app.routers.courses.generate_course_outline", return_value=["Intro", "Types", "Control flow"] + [f"T{i}" for i in range(12)]):
         r = client.post("/courses/outline", data={"title": "Py", "wishes": "All"}, headers=auth_headers())
         assert r.status_code == 200
         course = r.json()
         topic_id = course["topics"][0]["id"]
 
     # First generation should call AI and persist
-    with patch("app.routers.courses.generate_topic_content", return_value="Generated content") as mocked:
+    with patch_async("app.routers.courses.generate_topic_content", return_value="Generated content") as mocked:
         r1 = client.post(f"/courses/topics/{topic_id}/generate", headers=auth_headers())
         assert r1.status_code == 200
         assert r1.json()["content"] == "Generated content"
@@ -46,7 +57,7 @@ def test_generate_topic_content_first_time_and_idempotent(client: TestClient, au
         assert mocked.called
 
     # Second call should return stored content without calling AI
-    with patch("app.routers.courses.generate_topic_content", return_value="Should not be used") as mocked2:
+    with patch_async("app.routers.courses.generate_topic_content", return_value="Should not be used") as mocked2:
         r2 = client.post(f"/courses/topics/{topic_id}/generate", headers=auth_headers())
         assert r2.status_code == 200
         assert r2.json()["content"] == "Generated content"
@@ -55,7 +66,7 @@ def test_generate_topic_content_first_time_and_idempotent(client: TestClient, au
 
 
 def test_list_my_courses_and_topics(client: TestClient, auth_headers):
-    with patch("app.routers.courses.generate_course_outline", return_value=[f"A{i}" for i in range(15)]):
+    with patch_async("app.routers.courses.generate_course_outline", return_value=[f"A{i}" for i in range(15)]):
         r = client.post("/courses/outline", data={"title": "Course A", "wishes": "w"}, headers=auth_headers())
         assert r.status_code == 200
         course_id = r.json()["course_id"]
@@ -74,7 +85,7 @@ def test_list_my_courses_and_topics(client: TestClient, auth_headers):
 
 
 def test_delete_course(client: TestClient, auth_headers):
-    with patch("app.routers.courses.generate_course_outline", return_value=[f"A{i}" for i in range(15)]):
+    with patch_async("app.routers.courses.generate_course_outline", return_value=[f"A{i}" for i in range(15)]):
         created = client.post("/courses/outline", data={"title": "Delete me", "wishes": "w"}, headers=auth_headers())
         assert created.status_code == 200
         course_id = created.json()["course_id"]
@@ -88,7 +99,7 @@ def test_delete_course(client: TestClient, auth_headers):
 
 
 def test_course_settings_get_and_update(client: TestClient, auth_headers):
-    with patch("app.routers.courses.generate_course_outline", return_value=[f"A{i}" for i in range(15)]):
+    with patch_async("app.routers.courses.generate_course_outline", return_value=[f"A{i}" for i in range(15)]):
         created = client.post("/courses/outline", data={"title": "Settings", "wishes": "w"}, headers=auth_headers())
         assert created.status_code == 200
         course_id = created.json()["course_id"]
@@ -110,13 +121,13 @@ def test_course_settings_get_and_update(client: TestClient, auth_headers):
 
 
 def test_legacy_topic_content_model_defaults_to_gpt4o_mini(client: TestClient, auth_headers, db_session):
-    with patch("app.routers.courses.generate_course_outline", return_value=["Intro"] + [f"T{i}" for i in range(14)]):
+    with patch_async("app.routers.courses.generate_course_outline", return_value=["Intro"] + [f"T{i}" for i in range(14)]):
         created = client.post("/courses/outline", data={"title": "Legacy", "wishes": "w"}, headers=auth_headers())
         assert created.status_code == 200
         course_id = created.json()["course_id"]
         topic_id = created.json()["topics"][0]["id"]
 
-    with patch("app.routers.courses.generate_topic_content", return_value="Legacy content"):
+    with patch_async("app.routers.courses.generate_topic_content", return_value="Legacy content"):
         generated = client.post(f"/courses/topics/{topic_id}/generate", headers=auth_headers())
         assert generated.status_code == 200
         assert generated.json()["content_ai_model"] == "gpt-5-mini"
@@ -134,7 +145,7 @@ def test_legacy_topic_content_model_defaults_to_gpt4o_mini(client: TestClient, a
 
 
 def test_course_settings_accept_openrouter_models(client: TestClient, auth_headers):
-    with patch("app.routers.courses.generate_course_outline", return_value=[f"A{i}" for i in range(15)]):
+    with patch_async("app.routers.courses.generate_course_outline", return_value=[f"A{i}" for i in range(15)]):
         created = client.post("/courses/outline", data={"title": "OpenRouter", "wishes": "w"}, headers=auth_headers())
         assert created.status_code == 200
         course_id = created.json()["course_id"]
@@ -155,25 +166,25 @@ def test_course_settings_accept_openrouter_models(client: TestClient, auth_heade
 
 
 def _create_course_and_topic(client: TestClient, auth_headers):
-    with patch("app.routers.courses.generate_course_outline", return_value=["Intro"] + [f"T{i}" for i in range(14)]):
+    with patch_async("app.routers.courses.generate_course_outline", return_value=["Intro"] + [f"T{i}" for i in range(14)]):
         create_course = client.post("/courses/outline", data={"title": "Course", "wishes": "w"}, headers=auth_headers())
         assert create_course.status_code == 200
         topic_id = create_course.json()["topics"][0]["id"]
-    with patch("app.routers.courses.generate_topic_content", return_value="Lesson content"):
+    with patch_async("app.routers.courses.generate_topic_content", return_value="Lesson content"):
         generated_topic = client.post(f"/courses/topics/{topic_id}/generate", headers=auth_headers())
         assert generated_topic.status_code == 200
     return topic_id
 
 
 def _create_course_topic_without_content(client: TestClient, auth_headers):
-    with patch("app.routers.courses.generate_course_outline", return_value=["Intro"] + [f"T{i}" for i in range(14)]):
+    with patch_async("app.routers.courses.generate_course_outline", return_value=["Intro"] + [f"T{i}" for i in range(14)]):
         create_course = client.post("/courses/outline", data={"title": "HTML Course", "wishes": "w"}, headers=auth_headers())
         assert create_course.status_code == 200
         return create_course.json()["course_id"], create_course.json()["topics"][0]["id"]
 
 
 def test_outline_accepts_interactive_content_format(client: TestClient, auth_headers):
-    with patch("app.routers.courses.generate_course_outline", return_value=[f"T{i}" for i in range(15)]):
+    with patch_async("app.routers.courses.generate_course_outline", return_value=[f"T{i}" for i in range(15)]):
         created = client.post(
             "/courses/outline",
             data={
@@ -215,13 +226,13 @@ def test_generate_quiz_creates_once_and_reuses(client: TestClient, auth_headers)
         }
         for i in range(5)
     ]
-    with patch("app.routers.courses.generate_topic_quiz", return_value=questions) as mocked:
+    with patch_async("app.routers.courses.generate_topic_quiz", return_value=questions) as mocked:
         first = client.post(f"/courses/topics/{topic_id}/quiz/generate", headers=auth_headers())
         assert first.status_code == 200
         assert len(first.json()["questions"]) == 5
         assert mocked.called
 
-    with patch("app.routers.courses.generate_topic_quiz", return_value=questions) as mocked_second:
+    with patch_async("app.routers.courses.generate_topic_quiz", return_value=questions) as mocked_second:
         second = client.post(f"/courses/topics/{topic_id}/quiz/generate", headers=auth_headers())
         assert second.status_code == 200
         assert len(second.json()["questions"]) == 5
@@ -239,7 +250,7 @@ def test_submit_quiz_returns_score_and_stores_attempt(client: TestClient, auth_h
         }
         for i in range(5)
     ]
-    with patch("app.routers.courses.generate_topic_quiz", return_value=questions):
+    with patch_async("app.routers.courses.generate_topic_quiz", return_value=questions):
         generated = client.post(f"/courses/topics/{topic_id}/quiz/generate", headers=auth_headers())
         assert generated.status_code == 200
     quiz_data = generated.json()
@@ -286,7 +297,7 @@ def test_generate_topic_html_creates_and_replaces(client: TestClient, auth_heade
     course_id, topic_id = _create_course_topic_without_content(client, auth_headers)
 
     first_html = SAMPLE_HTML_DOCUMENT
-    with patch("app.routers.courses.generate_topic_html", return_value=first_html) as mocked:
+    with patch_async("app.routers.courses.generate_topic_html", return_value=first_html) as mocked:
         created = client.post(f"/courses/topics/{topic_id}/content/html", headers=auth_headers())
         assert created.status_code == 200
         body = created.json()
@@ -304,7 +315,7 @@ def test_generate_topic_html_creates_and_replaces(client: TestClient, auth_heade
     assert len(rows) == 1
 
     second_html = SAMPLE_HTML_DOCUMENT.replace("Тема", "Обновленная тема")
-    with patch("app.routers.courses.generate_topic_html", return_value=second_html) as mocked_again:
+    with patch_async("app.routers.courses.generate_topic_html", return_value=second_html) as mocked_again:
         regenerated = client.post(f"/courses/topics/{topic_id}/content/html", headers=auth_headers())
         assert regenerated.status_code == 200
         assert regenerated.json()["html"] == second_html
@@ -317,7 +328,7 @@ def test_generate_topic_html_creates_and_replaces(client: TestClient, auth_heade
 
 def test_generate_topic_html_invalid_response_returns_503(client: TestClient, auth_headers):
     _, topic_id = _create_course_topic_without_content(client, auth_headers)
-    with patch(
+    with patch_async(
         "app.routers.courses.generate_topic_html",
         side_effect=OpenAIError("model returned invalid html"),
     ):
@@ -333,7 +344,7 @@ def test_topics_list_marks_has_html_content(client: TestClient, auth_headers):
     target_before = next(item for item in listed_before.json() if item["id"] == topic_id)
     assert target_before["has_html_content"] is False
 
-    with patch("app.routers.courses.generate_topic_html", return_value=SAMPLE_HTML_DOCUMENT):
+    with patch_async("app.routers.courses.generate_topic_html", return_value=SAMPLE_HTML_DOCUMENT):
         created = client.post(f"/courses/topics/{topic_id}/content/html", headers=auth_headers())
         assert created.status_code == 200
 

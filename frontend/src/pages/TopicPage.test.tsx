@@ -9,6 +9,8 @@ const { mockCoursesApi } = vi.hoisted(() => ({
     topicMeta: vi.fn(),
     courseSettings: vi.fn(),
     generateTopic: vi.fn(),
+    streamTopic: vi.fn(),
+    streamTopicHtml: vi.fn(),
     topicQuiz: vi.fn(),
     generateTopicQuiz: vi.fn(),
     submitTopicQuiz: vi.fn(),
@@ -82,12 +84,10 @@ describe('TopicPage quiz flow', () => {
   it('submits quiz, shows result and resets on redo', async () => {
     localStorage.setItem('access_token', 'token')
 
-    mockCoursesApi.generateTopic.mockResolvedValue({
-      course_title: 'Demo',
-      course_id: 10,
-      topic_id: 100,
-      content: 'Chapter body',
-      content_ai_model: 'gpt-5-mini',
+    mockCoursesApi.streamTopic.mockImplementation(async (_topicId: unknown, onEvent: (event: unknown) => void) => {
+      onEvent({ type: 'started', topic_id: 100, course_id: 10, ai_model: 'gpt-5-mini', ai_provider: 'openai', course_title: 'Demo' })
+      onEvent({ type: 'chunk', delta: 'Chapter body' })
+      onEvent({ type: 'done', from_cache: false, content: 'Chapter body', ai_model: 'gpt-5-mini' })
     })
     mockCoursesApi.topicQuiz
       .mockRejectedValueOnce(new Error('not-found'))
@@ -172,15 +172,7 @@ describe('TopicPage interactive lesson', () => {
       ai_model: 'gpt-5-mini',
       generated_at: new Date('2024-01-01T00:00:00Z').toISOString(),
     })
-    mockCoursesApi.generateTopicHtml.mockResolvedValue({
-      topic_id: 100,
-      course_id: 10,
-      course_title: 'Demo',
-      html: SAMPLE_HTML,
-      ai_provider: 'openai',
-      ai_model: 'gpt-5-mini',
-      generated_at: new Date('2024-01-01T00:00:00Z').toISOString(),
-    })
+    mockCoursesApi.streamTopicHtml.mockResolvedValue(undefined)
 
     render(
       <MemoryRouter initialEntries={['/topics/100']}>
@@ -191,7 +183,7 @@ describe('TopicPage interactive lesson', () => {
     )
 
     await screen.findByText('Интерактивная глава готова')
-    expect(mockCoursesApi.generateTopic).not.toHaveBeenCalled()
+    expect(mockCoursesApi.streamTopic).not.toHaveBeenCalled()
 
     const iframe = document.querySelector('iframe[title="Глава: Demo"]') as HTMLIFrameElement | null
     expect(iframe).not.toBeNull()
@@ -204,14 +196,16 @@ describe('TopicPage interactive lesson', () => {
     localStorage.setItem('access_token', 'token')
 
     mockCoursesApi.topicHtml.mockRejectedValue(new Error('not-found'))
-    mockCoursesApi.generateTopicHtml.mockResolvedValue({
-      topic_id: 100,
-      course_id: 10,
-      course_title: 'Demo',
-      html: SAMPLE_HTML,
-      ai_provider: 'openai',
-      ai_model: 'gpt-5-mini',
-      generated_at: new Date('2024-01-01T00:00:00Z').toISOString(),
+    mockCoursesApi.streamTopicHtml.mockImplementation(async (_topicId: unknown, onEvent: (event: unknown) => void) => {
+      onEvent({ type: 'started', topic_id: 100, course_id: 10, ai_model: 'gpt-5-mini', ai_provider: 'openai', course_title: 'Demo' })
+      onEvent({ type: 'chunk', delta: SAMPLE_HTML })
+      onEvent({
+        type: 'done',
+        html: SAMPLE_HTML,
+        ai_model: 'gpt-5-mini',
+        ai_provider: 'openai',
+        generated_at: new Date('2024-01-01T00:00:00Z').toISOString(),
+      })
     })
 
     render(
@@ -223,13 +217,13 @@ describe('TopicPage interactive lesson', () => {
     )
 
     const triggerButton = await screen.findByRole('button', { name: 'Сгенерировать интерактивную главу' })
-    expect(mockCoursesApi.generateTopic).not.toHaveBeenCalled()
+    expect(mockCoursesApi.streamTopic).not.toHaveBeenCalled()
 
     const user = userEvent.setup()
     await user.click(triggerButton)
 
     await waitFor(() => {
-      expect(mockCoursesApi.generateTopicHtml).toHaveBeenCalledWith('100')
+      expect(mockCoursesApi.streamTopicHtml).toHaveBeenCalledWith('100', expect.any(Function), expect.any(AbortSignal))
     })
     await screen.findByText('Интерактивная глава готова')
   })

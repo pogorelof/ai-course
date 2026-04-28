@@ -21,7 +21,6 @@ class Settings(BaseSettings):
 
     LANGCHAIN_TRACING_V2: bool = bool(os.getenv("LANGCHAIN_TRACING_V2", ""))
     LANGCHAIN_API_KEY: Optional[str] = os.getenv("LANGCHAIN_API_KEY")
-    PROXY_URL: Optional[str] = os.getenv("PROXY_URL")
 
     model_config = SettingsConfigDict(
         env_file=os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".env")),

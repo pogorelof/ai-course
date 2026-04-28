@@ -53,6 +53,11 @@ class CourseAISettings(Base):
     )
     ai_provider: Mapped[str] = mapped_column(String(32), nullable=False, default="openai")
     ai_model: Mapped[str] = mapped_column(String(64), nullable=False, default="gpt-5-mini")
+    # For reasoning-capable models (gpt-5*, claude-*, deepseek-v4-pro, gemini-3.1-pro-*).
+    # "minimal" is the closest thing OpenAI exposes to "off" — it short-circuits the
+    # internal thinking loop, dropping TTFT dramatically. Non-reasoning models simply
+    # ignore this value (we don't pass it for them — see services/ai.py).
+    reasoning_effort: Mapped[str] = mapped_column(String(16), nullable=False, default="minimal")
 
     course: Mapped[Course] = relationship("Course", back_populates="ai_settings")
 
@@ -221,3 +226,34 @@ class TopicQuizAttemptAnswer(Base):
 
     attempt: Mapped[TopicQuizAttempt] = relationship("TopicQuizAttempt", back_populates="answers")
     question: Mapped[TopicQuizQuestion] = relationship("TopicQuizQuestion", back_populates="answers")
+
+
+class CourseGenerationJob(Base):
+    """Background queue that generates content for every topic of a course.
+
+    The same user can run multiple jobs across different courses in parallel;
+    only one active job per course is allowed at a time (enforced in code).
+    """
+
+    __tablename__ = "course_generation_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    course_id: Mapped[int] = mapped_column(
+        ForeignKey("courses.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    completed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    current_topic_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    current_topic_title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    content_format: Mapped[str] = mapped_column(String(16), nullable=False, default="text")
+    ai_provider: Mapped[str] = mapped_column(String(32), nullable=False, default="openai")
+    ai_model: Mapped[str] = mapped_column(String(64), nullable=False, default="gpt-5-mini")
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+    )

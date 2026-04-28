@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { CoursesAPI } from '../services/api'
-import type { TopicHtmlContentDto } from '../services/api'
-import type { ContentFormat, GeneratedTopic, TopicQuiz, TopicQuizResult } from '../types/domain'
+import type { StreamEvent, TopicHtmlContentDto } from '../services/api'
+import type { ContentFormat, TopicQuiz, TopicQuizResult } from '../types/domain'
 import { PageContainer } from '../components/PageContainer'
 import { LoadingPulse } from '../components/LoadingPulse'
 import { MarkdownRenderer } from '../components/MarkdownRenderer'
@@ -40,8 +40,16 @@ export function TopicPage() {
   const [htmlLesson, setHtmlLesson] = useState<TopicHtmlContentDto | null>(null)
   const [htmlLessonLoading, setHtmlLessonLoading] = useState(false)
   const [htmlLessonError, setHtmlLessonError] = useState<string | null>(null)
+  const [streaming, setStreaming] = useState(false)
+  const [streamedBytes, setStreamedBytes] = useState(0)
+  const streamAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
+    let cancelled = false
+    const controller = new AbortController()
+    streamAbortRef.current?.abort()
+    streamAbortRef.current = controller
+
     const run = async () => {
       if (!token || !topicId) return
       setLoading(true)
@@ -59,29 +67,68 @@ export function TopicPage() {
       setQuizResult(null)
       setHtmlLesson(null)
       setHtmlLessonError(null)
+      setStreaming(false)
+      setStreamedBytes(0)
       try {
         const meta = await CoursesAPI.topicMeta(topicId)
+        if (cancelled) return
         setTitle(meta.course_title)
         setCourseId(meta.course_id)
         setContentModel(meta.content_ai_model ?? null)
 
         const settings = await CoursesAPI.courseSettings(meta.course_id)
+        if (cancelled) return
         setContentFormat(settings.content_format)
 
         if (settings.content_format === 'text') {
-          const data: GeneratedTopic = await CoursesAPI.generateTopic(topicId)
-          setTitle(data.course_title)
-          setCourseId(data.course_id)
-          setContent(data.content)
-          setContentModel(data.content_ai_model)
+          let accumulated = ''
+          let usedCache = false
+          setLoading(false)
+          setStreaming(true)
+          await CoursesAPI.streamTopic(
+            topicId,
+            (event: StreamEvent) => {
+              if (cancelled) return
+              if (event.type === 'started') {
+                setTitle(event.course_title)
+                setCourseId(event.course_id)
+                setContentModel(event.ai_model)
+              } else if (event.type === 'cached') {
+                usedCache = true
+                accumulated = event.content
+                setContent(event.content)
+                setContentModel(event.ai_model)
+                setStreamedBytes(event.content.length)
+              } else if (event.type === 'chunk') {
+                accumulated += event.delta
+                setContent(accumulated)
+                setStreamedBytes(accumulated.length)
+              } else if (event.type === 'done') {
+                if (event.content && !usedCache) {
+                  accumulated = event.content
+                  setContent(event.content)
+                }
+                if (event.ai_model) setContentModel(event.ai_model)
+              } else if (event.type === 'error') {
+                throw new Error(event.detail || 'stream error')
+              }
+            },
+            controller.signal,
+          )
+          if (cancelled) return
+          setStreaming(false)
+          if (!accumulated) {
+            setError('Не удалось сгенерировать контент')
+          }
         } else {
           setContent(null)
           try {
             const lesson = await CoursesAPI.topicHtml(topicId)
+            if (cancelled) return
             setHtmlLesson(lesson)
             setContentModel(lesson.ai_model)
           } catch {
-            setHtmlLesson(null)
+            if (!cancelled) setHtmlLesson(null)
           }
         }
 
@@ -90,50 +137,93 @@ export function TopicPage() {
           setQuizLoading(true)
           try {
             const loadedQuiz = await CoursesAPI.topicQuiz(topicId)
+            if (cancelled) return
             setQuiz(loadedQuiz)
             setQuizResult(loadedQuiz.last_result ?? null)
           } catch {
+            if (cancelled) return
             if (settings.content_format === 'text') {
               try {
                 const generatedQuiz = await CoursesAPI.generateTopicQuiz(topicId)
+                if (cancelled) return
                 setQuiz(generatedQuiz)
                 setQuizResult(generatedQuiz.last_result ?? null)
               } catch {
-                setQuizError('Ошибка загрузки теста')
+                if (!cancelled) setQuizError('Ошибка загрузки теста')
               }
             } else {
               setQuiz(null)
               setQuizNotice('Тест пока недоступен: для новых интерактивных глав текстовый контент не генерируется автоматически.')
             }
           } finally {
-            setQuizLoading(false)
+            if (!cancelled) setQuizLoading(false)
           }
         } else {
           setQuiz(null)
           setQuizLoading(false)
           setQuizNotice('Тест недоступен для интерактивного формата, пока не сгенерирован текстовый контент.')
         }
-      } catch {
+      } catch (err) {
+        if (cancelled) return
+        if ((err as Error).name === 'AbortError') return
         setError('Ошибка генерации контента')
+        setStreaming(false)
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
     run()
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
   }, [token, topicId])
 
   const handleGenerateInteractiveLesson = async () => {
     if (!topicId || htmlLessonLoading || contentFormat !== 'interactive') return
     setHtmlLessonLoading(true)
     setHtmlLessonError(null)
+    setStreamedBytes(0)
+    setStreaming(true)
+    const controller = new AbortController()
+    streamAbortRef.current?.abort()
+    streamAbortRef.current = controller
     try {
-      const lesson = await CoursesAPI.generateTopicHtml(topicId)
-      setHtmlLesson(lesson)
-      setContentModel(lesson.ai_model)
-    } catch {
-      setHtmlLessonError('Не удалось сгенерировать интерактивную главу. Попробуйте ещё раз.')
+      let accumulated = ''
+      let errorDetail: string | null = null
+      await CoursesAPI.streamTopicHtml(
+        topicId,
+        (event) => {
+          if (event.type === 'chunk') {
+            accumulated += event.delta
+            setStreamedBytes(accumulated.length)
+          } else if (event.type === 'done' && event.html) {
+            setHtmlLesson({
+              topic_id: Number(topicId),
+              course_id: courseId ?? 0,
+              course_title: title ?? '',
+              html: event.html,
+              ai_provider: (event.ai_provider as 'openai' | 'openrouter') ?? 'openai',
+              ai_model: event.ai_model ?? '',
+              generated_at: event.generated_at ?? new Date().toISOString(),
+            })
+            if (event.ai_model) setContentModel(event.ai_model)
+          } else if (event.type === 'error') {
+            errorDetail = event.detail
+          }
+        },
+        controller.signal,
+      )
+      if (errorDetail) {
+        setHtmlLessonError('Не удалось сгенерировать интерактивную главу. Попробуйте ещё раз.')
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        setHtmlLessonError('Не удалось сгенерировать интерактивную главу. Попробуйте ещё раз.')
+      }
     } finally {
       setHtmlLessonLoading(false)
+      setStreaming(false)
     }
   }
 
@@ -184,7 +274,7 @@ export function TopicPage() {
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, paddingTop: 8 }}>
             <LoadingPulse />
-            <span>Генерируем контент...</span>
+            <span>Загружаем главу...</span>
           </div>
         ) : (
           <>
@@ -258,7 +348,10 @@ export function TopicPage() {
                 style={{ width: '100%', maxWidth: 1360, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 10 }}
               >
                 <LoadingPulse />
-                <span>Генерируем интерактивную главу. Это может занять до минуты...</span>
+                <span>
+                  Стрим интерактивной главы…
+                  {streamedBytes > 0 ? ` получено ${Math.round(streamedBytes / 1024)} КБ` : ''}
+                </span>
               </div>
             )}
 
@@ -278,7 +371,18 @@ export function TopicPage() {
               <div style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}>
                 {content ? (
                   <div className="surface-card surface-card--light" style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}>
+                    {streaming && (
+                      <div className="status-muted" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                        <LoadingPulse />
+                        <span>Стрим… {streamedBytes > 0 ? `получено ${streamedBytes.toLocaleString('ru-RU')} символов` : ''}</span>
+                      </div>
+                    )}
                     <MarkdownRenderer markdown={content} />
+                  </div>
+                ) : streaming ? (
+                  <div className="surface-card surface-card--light" style={{ width: '100%', maxWidth: 1360, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <LoadingPulse />
+                    <span>Подключаемся к модели и ждём первый токен…</span>
                   </div>
                 ) : (
                   <div className="surface-card surface-card--light" style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}>

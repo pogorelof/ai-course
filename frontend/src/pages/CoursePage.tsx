@@ -1,15 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { CoursesAPI } from '../services/api'
-import type { ContentFormat, Topic } from '../types/domain'
+import type { ContentFormat, ReasoningEffort, Topic } from '../types/domain'
 import { PageContainer } from '../components/PageContainer'
 import { LoadingPulse } from '../components/LoadingPulse'
 import { ModelLogo } from '../components/ModelLogo'
+import { ReasoningEffortPicker } from '../components/ReasoningEffortPicker'
 
 const OPENAI_MODELS = [
   { id: 'gpt-5.5', label: 'gpt-5.5', inputPrice: '$5', outputPrice: '$30' },
   { id: 'gpt-5.4', label: 'gpt-5.4', inputPrice: '$2.5', outputPrice: '$15' },
   { id: 'gpt-5.4-mini', label: 'gpt-5.4-mini', inputPrice: '$0.75', outputPrice: '$4.5' },
+  { id: 'gpt-4o-mini', label: 'gpt-4o-mini', inputPrice: '$0.15', outputPrice: '$0.60' },
   { id: 'gpt-5.4-nano', label: 'gpt-5.4-nano', inputPrice: '$0.2', outputPrice: '$1.25' },
   { id: 'gpt-5-mini', label: 'gpt-5-mini', inputPrice: '$0.25', outputPrice: '$2' },
   { id: 'gpt-5-nano', label: 'gpt-5-nano', inputPrice: '$0.05', outputPrice: '$0.4' },
@@ -47,6 +49,7 @@ export function CoursePage() {
   const [provider, setProvider] = useState<'openai' | 'openrouter'>('openai')
   const [model, setModel] = useState<string>('gpt-5-mini')
   const [contentFormat, setContentFormat] = useState<ContentFormat>('text')
+  const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>('minimal')
   const [modelsOpen, setModelsOpen] = useState(false)
   const [settingsLoading, setSettingsLoading] = useState(false)
   const [settingsStatus, setSettingsStatus] = useState<string | null>(null)
@@ -79,6 +82,7 @@ export function CoursePage() {
         setProvider(settings.ai_provider)
         setModel(settings.ai_model)
         setContentFormat(settings.content_format)
+        if (settings.reasoning_effort) setReasoningEffort(settings.reasoning_effort)
       } catch {
         // keep defaults
       }
@@ -101,10 +105,12 @@ export function CoursePage() {
         ai_provider: provider,
         ai_model: model,
         content_format: contentFormat,
+        reasoning_effort: reasoningEffort,
       })
       setProvider(updated.ai_provider)
       setModel(updated.ai_model)
       setContentFormat(updated.content_format)
+      if (updated.reasoning_effort) setReasoningEffort(updated.reasoning_effort)
       setSettingsStatus('Настройки сохранены')
     } catch (e) {
       setSettingsStatus('Не удалось сохранить настройки')
@@ -205,6 +211,7 @@ export function CoursePage() {
                 )}
               </div>
               <div className="price-note">Цены за 1M токенов: input / output</div>
+              <ReasoningEffortPicker model={model} value={reasoningEffort} onChange={setReasoningEffort} />
             </div>
             <div className="field">
               <span>Формат главы</span>

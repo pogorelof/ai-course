@@ -1,4 +1,5 @@
 export type ContentFormat = 'text' | 'interactive'
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high'
 
 export type Course = {
   id: number
@@ -16,6 +17,7 @@ export type CourseSettings = {
   ai_provider: 'openai' | 'openrouter'
   ai_model: string
   content_format: ContentFormat
+  reasoning_effort: ReasoningEffort
 }
 
 export type Topic = {

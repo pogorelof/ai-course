@@ -53,6 +53,70 @@ export async function apiFetch<T>(path: string, options: { method?: HttpMethod; 
   return undefined as unknown as T
 }
 
+export type StreamEvent =
+  | { type: 'started'; topic_id: number; course_id: number; ai_model: string; ai_provider: string; course_title: string }
+  | { type: 'cached'; content: string; ai_model: string }
+  | { type: 'chunk'; delta: string }
+  | { type: 'done'; from_cache?: boolean; content?: string; html?: string; ai_model?: string; ai_provider?: string; generated_at?: string | null }
+  | { type: 'error'; detail: string }
+
+export async function streamNdjson(
+  path: string,
+  options: { method?: HttpMethod; body?: unknown; auth?: boolean; signal?: AbortSignal } = {},
+  onEvent: (event: StreamEvent) => void,
+): Promise<void> {
+  const { method = 'POST', body, auth = false, signal } = options
+  const token = getAccessToken()
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/x-ndjson',
+      ...(auth && token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal,
+  })
+
+  if (!res.ok || !res.body) {
+    const text = await res.text().catch(() => '')
+    throw new Error(text || res.statusText)
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  let buffer = ''
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    let nlIndex = buffer.indexOf('\n')
+    while (nlIndex !== -1) {
+      const line = buffer.slice(0, nlIndex).trim()
+      buffer = buffer.slice(nlIndex + 1)
+      if (line) {
+        try {
+          const parsed = JSON.parse(line) as StreamEvent
+          onEvent(parsed)
+        } catch {
+          // ignore malformed line
+        }
+      }
+      nlIndex = buffer.indexOf('\n')
+    }
+  }
+
+  const tail = buffer.trim()
+  if (tail) {
+    try {
+      const parsed = JSON.parse(tail) as StreamEvent
+      onEvent(parsed)
+    } catch {
+      // ignore
+    }
+  }
+}
+
 export const AuthAPI = {
   async login(payload: { username: string; password: string }): Promise<{ access_token: string; token_type?: string }> {
     return apiFetch('/auth/login', { method: 'POST', body: payload })
@@ -102,13 +166,14 @@ export const CoursesAPI = {
   }>> {
     return apiFetch('/courses/mine', { auth: true })
   },
-  async outline(payload: { title: string; wishes: string; ai_provider: 'openai' | 'openrouter'; ai_model: string; content_format: 'text' | 'interactive'; file?: File }): Promise<{ course_id: number; topics: Array<{ id: number; title: string }> }> {
+  async outline(payload: { title: string; wishes: string; ai_provider: 'openai' | 'openrouter'; ai_model: string; content_format: 'text' | 'interactive'; reasoning_effort?: 'minimal' | 'low' | 'medium' | 'high'; file?: File }): Promise<{ course_id: number; topics: Array<{ id: number; title: string }> }> {
     const formData = new FormData()
     formData.append('title', payload.title)
     formData.append('wishes', payload.wishes)
     formData.append('ai_provider', payload.ai_provider)
     formData.append('ai_model', payload.ai_model)
     formData.append('content_format', payload.content_format)
+    formData.append('reasoning_effort', payload.reasoning_effort ?? 'minimal')
     if (payload.file) {
       formData.append('file', payload.file)
     }
@@ -133,6 +198,12 @@ export const CoursesAPI = {
     content_ai_model: string
   }> {
     return apiFetch(`/courses/topics/${topicId}/generate`, { method: 'POST', auth: true })
+  },
+  async streamTopic(topicId: number | string, onEvent: (event: StreamEvent) => void, signal?: AbortSignal): Promise<void> {
+    return streamNdjson(`/courses/topics/${topicId}/generate/stream`, { method: 'POST', auth: true, signal }, onEvent)
+  },
+  async streamTopicHtml(topicId: number | string, onEvent: (event: StreamEvent) => void, signal?: AbortSignal): Promise<void> {
+    return streamNdjson(`/courses/topics/${topicId}/content/html/stream`, { method: 'POST', auth: true, signal }, onEvent)
   },
   async topicMeta(topicId: number | string): Promise<TopicMetaDto> {
     return apiFetch(`/courses/topics/${topicId}/meta`, { auth: true })
@@ -226,13 +297,13 @@ export const CoursesAPI = {
   async deleteCourse(courseId: number | string): Promise<void> {
     await apiFetch(`/courses/${courseId}`, { method: 'DELETE', auth: true })
   },
-  async courseSettings(courseId: number | string): Promise<{ ai_provider: 'openai' | 'openrouter'; ai_model: string; content_format: 'text' | 'interactive' }> {
+  async courseSettings(courseId: number | string): Promise<{ ai_provider: 'openai' | 'openrouter'; ai_model: string; content_format: 'text' | 'interactive'; reasoning_effort: 'minimal' | 'low' | 'medium' | 'high' }> {
     return apiFetch(`/courses/${courseId}/settings`, { auth: true })
   },
   async updateCourseSettings(
     courseId: number | string,
-    payload: { ai_provider: 'openai' | 'openrouter'; ai_model: string; content_format: 'text' | 'interactive' }
-  ): Promise<{ ai_provider: 'openai' | 'openrouter'; ai_model: string; content_format: 'text' | 'interactive' }> {
+    payload: { ai_provider: 'openai' | 'openrouter'; ai_model: string; content_format: 'text' | 'interactive'; reasoning_effort: 'minimal' | 'low' | 'medium' | 'high' }
+  ): Promise<{ ai_provider: 'openai' | 'openrouter'; ai_model: string; content_format: 'text' | 'interactive'; reasoning_effort: 'minimal' | 'low' | 'medium' | 'high' }> {
     return apiFetch(`/courses/${courseId}/settings`, { method: 'PATCH', auth: true, body: payload })
   },
   async fetchCourseBookBlob(courseId: number | string): Promise<Blob> {
@@ -251,4 +322,30 @@ export const CoursesAPI = {
     const blob = await this.fetchCourseBookBlob(courseId)
     return URL.createObjectURL(blob)
   },
+  async enqueueCourseGeneration(courseId: number | string): Promise<CourseGenerationJobDto> {
+    return apiFetch(`/courses/${courseId}/queue`, { method: 'POST', auth: true })
+  },
+  async listMyQueues(): Promise<CourseGenerationJobDto[]> {
+    return apiFetch(`/courses/queues`, { auth: true })
+  },
+  async cancelQueueJob(jobId: number): Promise<CourseGenerationJobDto> {
+    return apiFetch(`/courses/queues/${jobId}`, { method: 'DELETE', auth: true })
+  },
+}
+
+export type CourseGenerationJobDto = {
+  id: number
+  course_id: number
+  course_title: string
+  status: 'pending' | 'running' | 'done' | 'error' | 'cancelled'
+  total: number
+  completed: number
+  current_topic_id: number | null
+  current_topic_title: string | null
+  content_format: 'text' | 'interactive'
+  ai_provider: 'openai' | 'openrouter'
+  ai_model: string
+  error_message: string | null
+  created_at: string
+  updated_at: string
 }

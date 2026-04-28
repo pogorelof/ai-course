@@ -7,6 +7,7 @@ SUPPORTED_OPENAI_MODELS = (
     "gpt-5.5",
     "gpt-5.4",
     "gpt-5.4-mini",
+    "gpt-4o-mini",
     "gpt-5.4-nano",
     "gpt-5-mini",
     "gpt-5-nano",
@@ -31,6 +32,7 @@ SUPPORTED_OPENROUTER_BASE_MODELS = (
 )
 NITRO_SUFFIX = ":nitro"
 SUPPORTED_CONTENT_FORMATS = ("text", "interactive")
+SUPPORTED_REASONING_EFFORTS = ("minimal", "low", "medium", "high")
 
 
 def _is_supported_openrouter_model(model: str) -> bool:
@@ -81,6 +83,7 @@ class CourseCreate(BaseModel):
     ai_provider: str = "openai"
     ai_model: str = "gpt-5-mini"
     content_format: str = "text"
+    reasoning_effort: str = "minimal"
 
     @field_validator("ai_provider")
     @classmethod
@@ -106,6 +109,14 @@ class CourseCreate(BaseModel):
         normalized = v.strip().lower()
         if normalized not in SUPPORTED_CONTENT_FORMATS:
             raise ValueError("Unsupported content_format")
+        return normalized
+
+    @field_validator("reasoning_effort")
+    @classmethod
+    def validate_reasoning_effort(cls, v: str) -> str:
+        normalized = (v or "minimal").strip().lower()
+        if normalized not in SUPPORTED_REASONING_EFFORTS:
+            raise ValueError("Unsupported reasoning_effort")
         return normalized
 
     @model_validator(mode="after")
@@ -226,6 +237,7 @@ class CourseSettingsUpdateInput(BaseModel):
     ai_provider: str
     ai_model: str
     content_format: str = "text"
+    reasoning_effort: str = "minimal"
 
     @field_validator("ai_provider")
     @classmethod
@@ -248,6 +260,14 @@ class CourseSettingsUpdateInput(BaseModel):
             raise ValueError("Unsupported content_format")
         return normalized
 
+    @field_validator("reasoning_effort")
+    @classmethod
+    def validate_reasoning_effort(cls, v: str) -> str:
+        normalized = (v or "minimal").strip().lower()
+        if normalized not in SUPPORTED_REASONING_EFFORTS:
+            raise ValueError("Unsupported reasoning_effort")
+        return normalized
+
     @model_validator(mode="after")
     def validate_provider_model(self):
         if self.ai_provider == "openai" and self.ai_model not in SUPPORTED_OPENAI_MODELS:
@@ -260,6 +280,7 @@ class CourseSettingsOut(BaseModel):
     ai_provider: str
     ai_model: str
     content_format: str = "text"
+    reasoning_effort: str = "minimal"
 
 
 class UserAPIKeysUpdateInput(BaseModel):
@@ -278,3 +299,23 @@ class UserAPIKeysUpdateInput(BaseModel):
 class UserAPIKeysOut(BaseModel):
     has_openai_key: bool = False
     has_openrouter_key: bool = False
+
+
+class CourseGenerationJobOut(BaseModel):
+    id: int
+    course_id: int
+    course_title: str
+    status: str
+    total: int
+    completed: int
+    current_topic_id: Optional[int] = None
+    current_topic_title: Optional[str] = None
+    content_format: str
+    ai_provider: str
+    ai_model: str
+    error_message: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

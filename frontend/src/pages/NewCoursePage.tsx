@@ -1,15 +1,17 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { CoursesAPI } from '../services/api'
-import type { ContentFormat, Topic } from '../types/domain'
+import type { ContentFormat, ReasoningEffort, Topic } from '../types/domain'
 import { PageContainer } from '../components/PageContainer'
 import { LoadingPulse } from '../components/LoadingPulse'
 import { ModelLogo } from '../components/ModelLogo'
+import { ReasoningEffortPicker } from '../components/ReasoningEffortPicker'
 
 const OPENAI_MODELS = [
   { id: 'gpt-5.5', label: 'gpt-5.5', inputPrice: '$5', outputPrice: '$30' },
   { id: 'gpt-5.4', label: 'gpt-5.4', inputPrice: '$2.5', outputPrice: '$15' },
   { id: 'gpt-5.4-mini', label: 'gpt-5.4-mini', inputPrice: '$0.75', outputPrice: '$4.5' },
+  { id: 'gpt-4o-mini', label: 'gpt-4o-mini', inputPrice: '$0.15', outputPrice: '$0.60' },
   { id: 'gpt-5.4-nano', label: 'gpt-5.4-nano', inputPrice: '$0.2', outputPrice: '$1.25' },
   { id: 'gpt-5-mini', label: 'gpt-5-mini', inputPrice: '$0.25', outputPrice: '$2' },
   { id: 'gpt-5-nano', label: 'gpt-5-nano', inputPrice: '$0.05', outputPrice: '$0.4' },
@@ -46,6 +48,7 @@ export function NewCoursePage() {
   const [aiProvider, setAiProvider] = useState<'openai' | 'openrouter'>('openai')
   const [aiModel, setAiModel] = useState<string>('gpt-5-mini')
   const [contentFormat, setContentFormat] = useState<ContentFormat>('text')
+  const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>('minimal')
   const [modelsOpen, setModelsOpen] = useState(false)
   const [file, setFile] = useState<File | undefined>(undefined)
   const [loading, setLoading] = useState(false)
@@ -68,6 +71,7 @@ export function NewCoursePage() {
         ai_provider: aiProvider,
         ai_model: aiModel,
         content_format: contentFormat,
+        reasoning_effort: reasoningEffort,
         file,
       })
       setCreatedCourseId(data.course_id)
@@ -204,6 +208,7 @@ export function NewCoursePage() {
                 <div className="price-note">
                   Цены за 1M токенов: input / output
                 </div>
+                <ReasoningEffortPicker model={aiModel} value={reasoningEffort} onChange={setReasoningEffort} />
               </div>
               <div className="field">
                 <span>PDF материал (необязательно)</span>

@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import './App.css'
 import { Header } from './components/Header'
+import { QueueNotifications } from './components/QueueNotifications'
 import { useAuth } from './hooks/useAuth'
 import { HomePage } from './pages/HomePage'
 import { LoginPage } from './pages/LoginPage'
@@ -23,6 +24,7 @@ export default function App() {
           <Route path="/courses/:courseId" element={<CoursePage />} />
           <Route path="/topics/:topicId" element={<TopicPage />} />
         </Routes>
+        <QueueNotifications />
       </BrowserRouter>
     </div>
   )
