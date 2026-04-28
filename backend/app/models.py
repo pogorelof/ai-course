@@ -85,6 +85,9 @@ class CourseTopic(Base):
     content_generation: Mapped[Optional["TopicContentGeneration"]] = relationship(
         "TopicContentGeneration", back_populates="topic", uselist=False, cascade="all, delete-orphan"
     )
+    html_content: Mapped[Optional["TopicHtmlContent"]] = relationship(
+        "TopicHtmlContent", back_populates="topic", uselist=False, cascade="all, delete-orphan"
+    )
 
 
 class TopicContentGeneration(Base):
@@ -99,6 +102,21 @@ class TopicContentGeneration(Base):
     generated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
 
     topic: Mapped[CourseTopic] = relationship("CourseTopic", back_populates="content_generation")
+
+
+class TopicHtmlContent(Base):
+    __tablename__ = "topic_html_content"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    topic_id: Mapped[int] = mapped_column(
+        ForeignKey("course_topics.id", ondelete="CASCADE"), nullable=False, unique=True, index=True
+    )
+    html: Mapped[str] = mapped_column(Text, nullable=False)
+    ai_provider: Mapped[str] = mapped_column(String(32), nullable=False, default="openai")
+    ai_model: Mapped[str] = mapped_column(String(64), nullable=False, default="gpt-5-mini")
+    generated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=datetime.utcnow)
+
+    topic: Mapped[CourseTopic] = relationship("CourseTopic", back_populates="html_content")
 
 
 class TopicQuiz(Base):
@@ -188,4 +206,3 @@ class TopicQuizAttemptAnswer(Base):
 
     attempt: Mapped[TopicQuizAttempt] = relationship("TopicQuizAttempt", back_populates="answers")
     question: Mapped[TopicQuizQuestion] = relationship("TopicQuizQuestion", back_populates="answers")
-

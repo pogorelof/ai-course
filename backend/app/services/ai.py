@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Dict, List, Optional
 
 from openai import OpenAI
@@ -13,8 +14,13 @@ from .prompts import (
     QUIZ_ADVICE_SYSTEM_PROMPT,
     TOPIC_CONTENT_PDF_APPENDIX,
     TOPIC_CONTENT_SYSTEM_PROMPT,
+    TOPIC_HTML_PDF_APPENDIX,
+    TOPIC_HTML_SYSTEM_PROMPT,
     TOPIC_QUIZ_SYSTEM_PROMPT,
 )
+
+
+MAX_HTML_DOCUMENT_LENGTH = 200_000
 
 
 def _extract_response_text(resp, context_name: str) -> str:
@@ -204,6 +210,90 @@ def generate_topic_content(
         ],
     )
     return _extract_response_text(resp, "generate_topic_content")
+
+
+def _strip_code_fences(text: str) -> str:
+    normalized = text.strip()
+    if normalized.startswith("```"):
+        lines = normalized.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        normalized = "\n".join(lines).strip()
+    return normalized
+
+
+def _extract_html_document(text: str, context_name: str) -> str:
+    normalized = _strip_code_fences(text)
+
+    lower = normalized.lower()
+    doctype_idx = lower.find("<!doctype")
+    html_idx = lower.find("<html")
+
+    candidates = [idx for idx in (doctype_idx, html_idx) if idx != -1]
+    if not candidates:
+        raise OpenAIError(f"{context_name}: model did not return an HTML document")
+    start = min(candidates)
+
+    end_idx = lower.rfind("</html>")
+    if end_idx == -1:
+        raise OpenAIError(f"{context_name}: HTML document is missing closing </html>")
+    end = end_idx + len("</html>")
+
+    document = normalized[start:end].strip()
+
+    if "<body" not in document.lower():
+        raise OpenAIError(f"{context_name}: HTML document has no <body>")
+    if len(document) < 500:
+        raise OpenAIError(f"{context_name}: HTML document is too short to be a real lesson")
+    if len(document) > MAX_HTML_DOCUMENT_LENGTH:
+        raise OpenAIError(
+            f"{context_name}: HTML document exceeds {MAX_HTML_DOCUMENT_LENGTH} characters"
+        )
+
+    return document
+
+
+def generate_topic_html(
+    course_title: str,
+    wishes: str,
+    topic_title: str,
+    model: str,
+    provider: str = "openai",
+    pdf_text: Optional[str] = None,
+    api_key: Optional[str] = None,
+) -> str:
+    sys = TOPIC_HTML_SYSTEM_PROMPT
+
+    user_content = (
+        f"Course: {course_title}\n"
+        f"Preferences: {wishes}\n"
+        f"Topic: {topic_title}\n"
+    )
+
+    if pdf_text:
+        sys += TOPIC_HTML_PDF_APPENDIX
+        user_content += f"PDF Content Context:\n{pdf_text[:50000]}\n"
+
+    user_content += (
+        "Generate the full self-contained interactive HTML lesson now. "
+        "Return only the HTML document, no prose, no markdown, no code fences."
+    )
+
+    client = _client(api_key=api_key, provider=provider)
+    resp = _chat_completion_with_model_fallback(
+        client,
+        "generate_topic_html",
+        provider=provider,
+        model=model,
+        messages=[
+            {"role": "system", "content": sys},
+            {"role": "user", "content": user_content},
+        ],
+    )
+    text = _extract_response_text(resp, "generate_topic_html")
+    return _extract_html_document(text, "generate_topic_html")
 
 
 def _parse_json_response(text: str, context_name: str) -> dict:

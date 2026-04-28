@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from typing import List, Optional
 
@@ -120,6 +121,7 @@ class TopicOut(BaseModel):
     last_score_percent: Optional[int] = None
     has_passed_quiz: bool = False
     has_attempts: bool = False
+    has_html_content: bool = False
 
     class Config:
         from_attributes = True
@@ -136,6 +138,16 @@ class TopicContentResponse(BaseModel):
     topic_id: int
     content: str
     content_ai_model: str
+
+
+class TopicHtmlContentOut(BaseModel):
+    topic_id: int
+    course_id: int
+    course_title: str
+    html: str
+    ai_provider: str
+    ai_model: str
+    generated_at: datetime
 
 
 class QuizQuestionOut(BaseModel):

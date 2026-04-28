@@ -1,8 +1,23 @@
 from fastapi.testclient import TestClient
 from unittest.mock import patch
+from openai import OpenAIError
 from sqlalchemy import select
 
-from app.models import TopicContentGeneration, TopicQuizAttempt, TopicQuizAttemptAnswer
+from app.models import (
+    TopicContentGeneration,
+    TopicHtmlContent,
+    TopicQuizAttempt,
+    TopicQuizAttemptAnswer,
+)
+
+
+SAMPLE_HTML_DOCUMENT = (
+    "<!doctype html>"
+    "<html lang=\"ru\"><head><meta charset=\"utf-8\"><title>Lesson</title></head>"
+    "<body><main><h1>Тема</h1>"
+    + ("<p>Lorem ipsum dolor sit amet.</p>" * 30)
+    + "</main></body></html>"
+)
 
 
 def test_create_outline_creates_15_topics(client: TestClient, auth_headers):
@@ -55,6 +70,7 @@ def test_list_my_courses_and_topics(client: TestClient, auth_headers):
     r_topics = client.get(f"/courses/{course_id}/topics", headers=auth_headers())
     assert r_topics.status_code == 200
     assert len(r_topics.json()) == 15
+    assert all(item["has_html_content"] is False for item in r_topics.json())
 
 
 def test_delete_course(client: TestClient, auth_headers):
@@ -142,6 +158,13 @@ def _create_course_and_topic(client: TestClient, auth_headers):
     return topic_id
 
 
+def _create_course_topic_without_content(client: TestClient, auth_headers):
+    with patch("app.routers.courses.generate_course_outline", return_value=["Intro"] + [f"T{i}" for i in range(14)]):
+        create_course = client.post("/courses/outline", data={"title": "HTML Course", "wishes": "w"}, headers=auth_headers())
+        assert create_course.status_code == 200
+        return create_course.json()["course_id"], create_course.json()["topics"][0]["id"]
+
+
 def test_generate_quiz_creates_once_and_reuses(client: TestClient, auth_headers):
     topic_id = _create_course_and_topic(client, auth_headers)
     questions = [
@@ -212,3 +235,72 @@ def test_submit_quiz_returns_score_and_stores_attempt(client: TestClient, auth_h
     answers_rows = db_session.scalars(select(TopicQuizAttemptAnswer)).all()
     assert len(attempts) >= 1
     assert len(answers_rows) >= 5
+
+
+def test_topic_html_get_returns_404_when_not_generated(client: TestClient, auth_headers):
+    _, topic_id = _create_course_topic_without_content(client, auth_headers)
+    response = client.get(f"/courses/topics/{topic_id}/content/html", headers=auth_headers())
+    assert response.status_code == 404
+
+
+def test_generate_topic_html_creates_and_replaces(client: TestClient, auth_headers, db_session):
+    course_id, topic_id = _create_course_topic_without_content(client, auth_headers)
+
+    first_html = SAMPLE_HTML_DOCUMENT
+    with patch("app.routers.courses.generate_topic_html", return_value=first_html) as mocked:
+        created = client.post(f"/courses/topics/{topic_id}/content/html", headers=auth_headers())
+        assert created.status_code == 200
+        body = created.json()
+        assert body["topic_id"] == topic_id
+        assert body["course_id"] == course_id
+        assert body["html"] == first_html
+        assert body["ai_model"] == "gpt-5-mini"
+        assert mocked.called
+
+    fetched = client.get(f"/courses/topics/{topic_id}/content/html", headers=auth_headers())
+    assert fetched.status_code == 200
+    assert fetched.json()["html"] == first_html
+
+    rows = db_session.scalars(select(TopicHtmlContent).where(TopicHtmlContent.topic_id == topic_id)).all()
+    assert len(rows) == 1
+
+    second_html = SAMPLE_HTML_DOCUMENT.replace("Тема", "Обновленная тема")
+    with patch("app.routers.courses.generate_topic_html", return_value=second_html) as mocked_again:
+        regenerated = client.post(f"/courses/topics/{topic_id}/content/html", headers=auth_headers())
+        assert regenerated.status_code == 200
+        assert regenerated.json()["html"] == second_html
+        assert mocked_again.called
+
+    rows_after = db_session.scalars(select(TopicHtmlContent).where(TopicHtmlContent.topic_id == topic_id)).all()
+    assert len(rows_after) == 1
+    assert rows_after[0].html == second_html
+
+
+def test_generate_topic_html_invalid_response_returns_503(client: TestClient, auth_headers):
+    _, topic_id = _create_course_topic_without_content(client, auth_headers)
+    with patch(
+        "app.routers.courses.generate_topic_html",
+        side_effect=OpenAIError("model returned invalid html"),
+    ):
+        response = client.post(f"/courses/topics/{topic_id}/content/html", headers=auth_headers())
+    assert response.status_code == 503
+
+
+def test_topics_list_marks_has_html_content(client: TestClient, auth_headers):
+    course_id, topic_id = _create_course_topic_without_content(client, auth_headers)
+
+    listed_before = client.get(f"/courses/{course_id}/topics", headers=auth_headers())
+    assert listed_before.status_code == 200
+    target_before = next(item for item in listed_before.json() if item["id"] == topic_id)
+    assert target_before["has_html_content"] is False
+
+    with patch("app.routers.courses.generate_topic_html", return_value=SAMPLE_HTML_DOCUMENT):
+        created = client.post(f"/courses/topics/{topic_id}/content/html", headers=auth_headers())
+        assert created.status_code == 200
+
+    listed_after = client.get(f"/courses/{course_id}/topics", headers=auth_headers())
+    assert listed_after.status_code == 200
+    target_after = next(item for item in listed_after.json() if item["id"] == topic_id)
+    assert target_after["has_html_content"] is True
+    others = [item for item in listed_after.json() if item["id"] != topic_id]
+    assert all(item["has_html_content"] is False for item in others)

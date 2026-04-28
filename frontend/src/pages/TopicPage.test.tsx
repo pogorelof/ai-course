@@ -10,6 +10,8 @@ const { mockCoursesApi } = vi.hoisted(() => ({
     topicQuiz: vi.fn(),
     generateTopicQuiz: vi.fn(),
     submitTopicQuiz: vi.fn(),
+    topicHtml: vi.fn(),
+    generateTopicHtml: vi.fn(),
   },
 }))
 
@@ -31,10 +33,32 @@ Object.defineProperty(globalThis, 'localStorage', {
   configurable: true,
 })
 
+const SAMPLE_HTML = '<!doctype html><html><body><main><h1>Lesson</h1></main></body></html>'
+
+const baseQuiz = {
+  topic_id: 100,
+  questions: Array.from({ length: 5 }, (_, idx) => ({
+    id: idx + 1,
+    question_text: `Question ${idx + 1}`,
+    options: ['A', 'B', 'C', 'D'],
+  })),
+  progress: { has_attempts: false, last_score_percent: null, attempts_count: 0 },
+}
+
 describe('TopicPage quiz flow', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     storage.clear()
+    mockCoursesApi.topicHtml.mockRejectedValue(new Error('not-found'))
+    mockCoursesApi.generateTopicHtml.mockResolvedValue({
+      topic_id: 100,
+      course_id: 10,
+      course_title: 'Demo',
+      html: SAMPLE_HTML,
+      ai_provider: 'openai',
+      ai_model: 'gpt-5-mini',
+      generated_at: new Date('2024-01-01T00:00:00Z').toISOString(),
+    })
   })
 
   it('submits quiz, shows result and resets on redo', async () => {
@@ -45,27 +69,15 @@ describe('TopicPage quiz flow', () => {
       course_id: 10,
       topic_id: 100,
       content: 'Chapter body',
+      content_ai_model: 'gpt-5-mini',
     })
     mockCoursesApi.topicQuiz
       .mockRejectedValueOnce(new Error('not-found'))
       .mockResolvedValueOnce({
-        topic_id: 100,
-        questions: Array.from({ length: 5 }, (_, idx) => ({
-          id: idx + 1,
-          question_text: `Question ${idx + 1}`,
-          options: ['A', 'B', 'C', 'D'],
-        })),
+        ...baseQuiz,
         progress: { has_attempts: true, last_score_percent: 60, attempts_count: 1 },
       })
-    mockCoursesApi.generateTopicQuiz.mockResolvedValue({
-      topic_id: 100,
-      questions: Array.from({ length: 5 }, (_, idx) => ({
-        id: idx + 1,
-        question_text: `Question ${idx + 1}`,
-        options: ['A', 'B', 'C', 'D'],
-      })),
-      progress: { has_attempts: false, last_score_percent: null, attempts_count: 0 },
-    })
+    mockCoursesApi.generateTopicQuiz.mockResolvedValue(baseQuiz)
     mockCoursesApi.submitTopicQuiz.mockResolvedValue({
       score_percent: 60,
       total_questions: 5,
@@ -111,6 +123,99 @@ describe('TopicPage quiz flow', () => {
     await user.click(screen.getByRole('button', { name: 'Переделать' }))
     await waitFor(() => {
       expect(screen.queryByText(/Результат: 60%/)).not.toBeInTheDocument()
+    })
+  })
+})
+
+describe('TopicPage interactive lesson', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    storage.clear()
+    mockCoursesApi.generateTopic.mockResolvedValue({
+      course_title: 'Demo',
+      course_id: 10,
+      topic_id: 100,
+      content: 'Markdown body of the lesson',
+      content_ai_model: 'gpt-5-mini',
+    })
+    mockCoursesApi.topicQuiz.mockResolvedValue(baseQuiz)
+    mockCoursesApi.generateTopicQuiz.mockResolvedValue(baseQuiz)
+  })
+
+  it('renders existing interactive html and hides markdown content', async () => {
+    localStorage.setItem('access_token', 'token')
+
+    mockCoursesApi.topicHtml.mockResolvedValue({
+      topic_id: 100,
+      course_id: 10,
+      course_title: 'Demo',
+      html: SAMPLE_HTML,
+      ai_provider: 'openai',
+      ai_model: 'gpt-5-mini',
+      generated_at: new Date('2024-01-01T00:00:00Z').toISOString(),
+    })
+    mockCoursesApi.generateTopicHtml.mockResolvedValue({
+      topic_id: 100,
+      course_id: 10,
+      course_title: 'Demo',
+      html: SAMPLE_HTML,
+      ai_provider: 'openai',
+      ai_model: 'gpt-5-mini',
+      generated_at: new Date('2024-01-01T00:00:00Z').toISOString(),
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/topics/100']}>
+        <Routes>
+          <Route path="/topics/:topicId" element={<TopicPage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await screen.findByText('Интерактивная глава готова')
+    expect(screen.queryByText('Markdown body of the lesson')).not.toBeInTheDocument()
+
+    const iframe = document.querySelector('iframe[title="Глава: Demo"]') as HTMLIFrameElement | null
+    expect(iframe).not.toBeNull()
+    expect(iframe?.getAttribute('sandbox')).toBe('allow-scripts')
+
+    expect(screen.getByRole('button', { name: 'Перегенерировать' })).toBeInTheDocument()
+  })
+
+  it('generates interactive lesson on click when none exists yet', async () => {
+    localStorage.setItem('access_token', 'token')
+
+    mockCoursesApi.topicHtml.mockRejectedValue(new Error('not-found'))
+    mockCoursesApi.generateTopicHtml.mockResolvedValue({
+      topic_id: 100,
+      course_id: 10,
+      course_title: 'Demo',
+      html: SAMPLE_HTML,
+      ai_provider: 'openai',
+      ai_model: 'gpt-5-mini',
+      generated_at: new Date('2024-01-01T00:00:00Z').toISOString(),
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/topics/100']}>
+        <Routes>
+          <Route path="/topics/:topicId" element={<TopicPage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    const triggerButton = await screen.findByRole('button', { name: 'Сгенерировать интерактивную главу' })
+    expect(screen.getByText('Markdown body of the lesson')).toBeInTheDocument()
+
+    const user = userEvent.setup()
+    await user.click(triggerButton)
+
+    await waitFor(() => {
+      expect(mockCoursesApi.generateTopicHtml).toHaveBeenCalledWith('100')
+    })
+    await screen.findByText('Интерактивная глава готова')
+    await waitFor(() => {
+      expect(screen.queryByText('Markdown body of the lesson')).not.toBeInTheDocument()
     })
   })
 })

@@ -21,6 +21,7 @@ export type Topic = {
   last_score_percent?: number | null
   has_passed_quiz?: boolean
   has_attempts?: boolean
+  has_html_content?: boolean
 }
 
 export type GeneratedTopic = {
@@ -29,6 +30,16 @@ export type GeneratedTopic = {
   topic_id: number
   content: string
   content_ai_model: string
+}
+
+export type TopicHtmlContent = {
+  topic_id: number
+  course_id: number
+  course_title: string
+  html: string
+  ai_provider: 'openai' | 'openrouter'
+  ai_model: string
+  generated_at: string
 }
 
 export type TopicQuizQuestion = {
@@ -71,5 +82,3 @@ export type AuthState = {
   username: string | null
   token: string | null
 }
-
-

@@ -25,7 +25,7 @@ async function renderPdfCover(blob: Blob): Promise<string> {
     if (!context) throw new Error('No canvas context')
     canvas.width = Math.ceil(viewport.width)
     canvas.height = Math.ceil(viewport.height)
-    await page.render({ canvasContext: context, viewport }).promise
+    await page.render({ canvas, canvasContext: context, viewport }).promise
     return canvas.toDataURL('image/jpeg', 0.86)
   } finally {
     await pdf.destroy()

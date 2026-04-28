@@ -1,11 +1,24 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { CoursesAPI } from '../services/api'
+import type { TopicHtmlContentDto } from '../services/api'
 import type { GeneratedTopic, TopicQuiz, TopicQuizResult } from '../types/domain'
 import { PageContainer } from '../components/PageContainer'
 import { LoadingPulse } from '../components/LoadingPulse'
 import { MarkdownRenderer } from '../components/MarkdownRenderer'
+import { InteractiveContentFrame } from '../components/InteractiveContentFrame'
 import { ModelLogo } from '../components/ModelLogo'
+
+function formatGeneratedAt(value: string | null | undefined): string | null {
+  if (!value) return null
+  try {
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) return null
+    return parsed.toLocaleString()
+  } catch {
+    return null
+  }
+}
 
 export function TopicPage() {
   const token = typeof localStorage !== 'undefined' ? localStorage.getItem('access_token') : null
@@ -22,6 +35,9 @@ export function TopicPage() {
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({})
   const [quizResult, setQuizResult] = useState<TopicQuizResult | null>(null)
   const [quizSubmitting, setQuizSubmitting] = useState(false)
+  const [htmlLesson, setHtmlLesson] = useState<TopicHtmlContentDto | null>(null)
+  const [htmlLessonLoading, setHtmlLessonLoading] = useState(false)
+  const [htmlLessonError, setHtmlLessonError] = useState<string | null>(null)
 
   useEffect(() => {
     const run = async () => {
@@ -37,12 +53,20 @@ export function TopicPage() {
       setQuizError(null)
       setSelectedAnswers({})
       setQuizResult(null)
+      setHtmlLesson(null)
+      setHtmlLessonError(null)
       try {
         const data: GeneratedTopic = await CoursesAPI.generateTopic(topicId)
         setTitle(data.course_title)
         setCourseId(data.course_id)
         setContent(data.content)
         setContentModel(data.content_ai_model)
+        try {
+          const lesson = await CoursesAPI.topicHtml(topicId)
+          setHtmlLesson(lesson)
+        } catch {
+          setHtmlLesson(null)
+        }
         setQuizLoading(true)
         try {
           const loadedQuiz = await CoursesAPI.topicQuiz(topicId)
@@ -67,6 +91,20 @@ export function TopicPage() {
     }
     run()
   }, [token, topicId])
+
+  const handleGenerateInteractiveLesson = async () => {
+    if (!topicId || htmlLessonLoading) return
+    setHtmlLessonLoading(true)
+    setHtmlLessonError(null)
+    try {
+      const lesson = await CoursesAPI.generateTopicHtml(topicId)
+      setHtmlLesson(lesson)
+    } catch {
+      setHtmlLessonError('Не удалось сгенерировать интерактивную главу. Попробуйте ещё раз.')
+    } finally {
+      setHtmlLessonLoading(false)
+    }
+  }
 
   const handleSelectAnswer = (questionId: number, optionIndex: number) => {
     setSelectedAnswers(prev => ({ ...prev, [questionId]: optionIndex }))
@@ -107,6 +145,8 @@ export function TopicPage() {
     return quizResult?.question_results?.find(item => item.question_id === questionId) ?? null
   }
 
+  const formattedGeneratedAt = formatGeneratedAt(htmlLesson?.generated_at)
+
   return (
     <PageContainer fullWidth>
       <div className="section-stack" style={{ width: '100%', maxWidth: 1440, margin: '0 auto' }}>
@@ -134,11 +174,72 @@ export function TopicPage() {
               )}
             </div>
             {error && <p className="status-error" style={{ textAlign: 'center' }}>{error}</p>}
-            {content && (
-              <div className="surface-card surface-card--light" style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}>
-                <MarkdownRenderer markdown={content} />
+
+            {(content || htmlLesson || htmlLessonLoading) && (
+              <div
+                className="interactive-lesson-bar"
+                style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}
+              >
+                <div className="interactive-lesson-bar-info">
+                  {htmlLesson ? (
+                    <>
+                      <span className="interactive-lesson-bar-title">Интерактивная глава готова</span>
+                      <span className="status-muted">
+                        Модель: {htmlLesson.ai_model}
+                        {formattedGeneratedAt ? ` · сгенерировано ${formattedGeneratedAt}` : ''}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="interactive-lesson-bar-title">Интерактивная глава</span>
+                      <span className="status-muted">
+                        Сгенерируйте насыщенную HTML-главу с mind map, карточками, мини-тестами и инфографикой.
+                      </span>
+                    </>
+                  )}
+                </div>
+                <div className="interactive-lesson-bar-actions">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={handleGenerateInteractiveLesson}
+                    disabled={htmlLessonLoading}
+                  >
+                    {htmlLessonLoading
+                      ? 'Генерируем...'
+                      : htmlLesson
+                        ? 'Перегенерировать'
+                        : 'Сгенерировать интерактивную главу'}
+                  </button>
+                </div>
+                {htmlLessonError && (
+                  <p className="status-error" style={{ width: '100%', margin: 0 }}>{htmlLessonError}</p>
+                )}
               </div>
             )}
+
+            {htmlLessonLoading && !htmlLesson && (
+              <div
+                className="surface-card surface-card--light"
+                style={{ width: '100%', maxWidth: 1360, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 10 }}
+              >
+                <LoadingPulse />
+                <span>Генерируем интерактивную главу. Это может занять до минуты...</span>
+              </div>
+            )}
+
+            {htmlLesson ? (
+              <div style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}>
+                <InteractiveContentFrame html={htmlLesson.html} title={`Глава: ${title ?? ''}`} />
+              </div>
+            ) : (
+              content && (
+                <div className="surface-card surface-card--light" style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}>
+                  <MarkdownRenderer markdown={content} />
+                </div>
+              )
+            )}
+
             <section className="surface-card surface-card--light quiz-card" style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}>
               <div className="section-stack" style={{ gap: 16 }}>
                 <div>
@@ -241,5 +342,3 @@ export function TopicPage() {
     </PageContainer>
   )
 }
-
-

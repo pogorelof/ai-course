@@ -68,6 +68,16 @@ export const AuthAPI = {
   },
 }
 
+export type TopicHtmlContentDto = {
+  topic_id: number
+  course_id: number
+  course_title: string
+  html: string
+  ai_provider: 'openai' | 'openrouter'
+  ai_model: string
+  generated_at: string
+}
+
 export const CoursesAPI = {
   async myCourses(): Promise<Array<{
     id: number
@@ -99,6 +109,7 @@ export const CoursesAPI = {
     last_score_percent?: number | null
     has_passed_quiz?: boolean
     has_attempts?: boolean
+    has_html_content?: boolean
   }>> {
     return apiFetch(`/courses/${courseId}/topics`, { auth: true })
   },
@@ -190,6 +201,12 @@ export const CoursesAPI = {
       auth: true,
       body: { answers },
     })
+  },
+  async topicHtml(topicId: number | string): Promise<TopicHtmlContentDto> {
+    return apiFetch(`/courses/topics/${topicId}/content/html`, { auth: true })
+  },
+  async generateTopicHtml(topicId: number | string): Promise<TopicHtmlContentDto> {
+    return apiFetch(`/courses/topics/${topicId}/content/html`, { method: 'POST', auth: true })
   },
   async deleteCourse(courseId: number | string): Promise<void> {
     await apiFetch(`/courses/${courseId}`, { method: 'DELETE', auth: true })

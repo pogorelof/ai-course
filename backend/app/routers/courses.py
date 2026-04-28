@@ -19,6 +19,7 @@ from ..models import (
     UserAPIKeys,
     CourseTopic,
     TopicContentGeneration,
+    TopicHtmlContent,
     TopicQuiz,
     TopicQuizAttempt,
     TopicQuizAttemptAnswer,
@@ -35,6 +36,7 @@ from ..schemas import (
     QuizSubmitInput,
     QuizWrongAdviceOut,
     TopicContentResponse,
+    TopicHtmlContentOut,
     TopicOut,
     TopicQuizOut,
     TopicQuizProgressOut,
@@ -44,6 +46,7 @@ from ..services.ai import (
     extract_text_from_pdf,
     generate_course_outline,
     generate_topic_content,
+    generate_topic_html,
     generate_topic_quiz,
 )
 
@@ -124,6 +127,25 @@ def _upsert_topic_content_generation(topic_id: int, ai_provider: str, ai_model: 
         meta.ai_provider = ai_provider
         meta.ai_model = ai_model
     db.add(meta)
+
+
+def _upsert_topic_html_content(topic_id: int, html: str, ai_provider: str, ai_model: str, db: Session) -> TopicHtmlContent:
+    record = db.scalar(select(TopicHtmlContent).where(TopicHtmlContent.topic_id == topic_id))
+    if not record:
+        record = TopicHtmlContent(
+            topic_id=topic_id,
+            html=html,
+            ai_provider=ai_provider,
+            ai_model=ai_model,
+        )
+    else:
+        record.html = html
+        record.ai_provider = ai_provider
+        record.ai_model = ai_model
+        from datetime import datetime
+        record.generated_at = datetime.utcnow()
+    db.add(record)
+    return record
 
 
 @router.post("/outline", response_model=CourseOutlineResponse)
@@ -562,6 +584,78 @@ def submit_topic_quiz(
     )
 
 
+@router.get("/topics/{topic_id}/content/html", response_model=TopicHtmlContentOut)
+def get_topic_html(topic_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    topic, course = _get_topic_and_course_or_404(topic_id, db, current_user.id)
+    record = db.scalar(select(TopicHtmlContent).where(TopicHtmlContent.topic_id == topic.id))
+    if not record:
+        raise HTTPException(status_code=404, detail="Interactive lesson is not generated yet")
+    return TopicHtmlContentOut(
+        topic_id=topic.id,
+        course_id=course.id,
+        course_title=course.title,
+        html=record.html,
+        ai_provider=record.ai_provider,
+        ai_model=record.ai_model,
+        generated_at=record.generated_at,
+    )
+
+
+@router.post("/topics/{topic_id}/content/html", response_model=TopicHtmlContentOut)
+def generate_topic_html_endpoint(
+    topic_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    topic, course = _get_topic_and_course_or_404(topic_id, db, current_user.id)
+    ai_provider, ai_model = _resolve_course_ai_settings(course, db)
+    _assert_active_ai_provider(ai_provider)
+    api_key = _require_user_api_key(current_user.id, ai_provider, db)
+
+    pdf_text = None
+    if course.pdf_path and os.path.exists(course.pdf_path):
+        pdf_text = extract_text_from_pdf(course.pdf_path)
+
+    try:
+        html = generate_topic_html(
+            course_title=course.title,
+            wishes=course.wishes,
+            topic_title=topic.title,
+            model=ai_model,
+            provider=ai_provider,
+            pdf_text=pdf_text,
+            api_key=api_key,
+        )
+    except OpenAIError as e:
+        logger.exception(
+            "AI topic html generation failed: user_id=%s course_id=%s topic_id=%s provider=%s model=%s error=%s",
+            current_user.id,
+            course.id,
+            topic.id,
+            ai_provider,
+            ai_model,
+            str(e),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
+
+    record = _upsert_topic_html_content(topic.id, html, ai_provider, ai_model, db)
+    db.commit()
+    db.refresh(record)
+
+    return TopicHtmlContentOut(
+        topic_id=topic.id,
+        course_id=course.id,
+        course_title=course.title,
+        html=record.html,
+        ai_provider=record.ai_provider,
+        ai_model=record.ai_model,
+        generated_at=record.generated_at,
+    )
+
+
 @router.get("/mine", response_model=List[CourseOut])
 def list_my_courses(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     courses = db.scalars(select(Course).where(Course.owner_id == current_user.id)).all()
@@ -652,6 +746,16 @@ def list_course_topics(course_id: int, db: Session = Depends(get_db), current_us
     if not course or course.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Forbidden")
     topics = db.scalars(select(CourseTopic).where(CourseTopic.course_id == course_id)).all()
+
+    topic_ids = [topic.id for topic in topics]
+    html_topic_ids: set[int] = set()
+    if topic_ids:
+        html_topic_ids = set(
+            db.scalars(
+                select(TopicHtmlContent.topic_id).where(TopicHtmlContent.topic_id.in_(topic_ids))
+            ).all()
+        )
+
     result: list[TopicOut] = []
     for topic in topics:
         quiz = db.scalar(select(TopicQuiz).where(TopicQuiz.topic_id == topic.id))
@@ -677,6 +781,7 @@ def list_course_topics(course_id: int, db: Session = Depends(get_db), current_us
                 last_score_percent=last_score,
                 has_attempts=has_attempts,
                 has_passed_quiz=has_passed_quiz,
+                has_html_content=topic.id in html_topic_ids,
             )
         )
     return result

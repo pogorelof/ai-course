@@ -225,10 +225,17 @@ export function CoursePage() {
                     {t.has_passed_quiz ? `Тест: ${t.last_score_percent}%` : `Тест не пройден: ${t.last_score_percent}%`}
                   </span>
                 )}
-                <span className={`topic-model ${t.content_ai_model ? '' : 'topic-model--pending'}`}>
-                  <ModelLogo size={11} model={t.content_ai_model} />
-                  <span>{t.content_ai_model ?? 'не сгенерировано'}</span>
-                </span>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span className={`topic-model ${t.content_ai_model ? '' : 'topic-model--pending'}`}>
+                    <ModelLogo size={11} model={t.content_ai_model} />
+                    <span>{t.content_ai_model ?? 'не сгенерировано'}</span>
+                  </span>
+                  {t.has_html_content && (
+                    <span className="topic-badge topic-badge--interactive" title="Доступна интерактивная HTML-глава">
+                      Интерактивная
+                    </span>
+                  )}
+                </div>
               </div>
               <Link to={`/topics/${t.id}`} className="btn btn-pill">
                 Открыть
@@ -240,5 +247,3 @@ export function CoursePage() {
     </PageContainer>
   )
 }
-
-
