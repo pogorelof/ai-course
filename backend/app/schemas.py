@@ -236,7 +236,7 @@ class TopicQuizOut(BaseModel):
 class CourseSettingsUpdateInput(BaseModel):
     ai_provider: str
     ai_model: str
-    content_format: str = "text"
+    content_format: Optional[str] = None
     reasoning_effort: str = "minimal"
 
     @field_validator("ai_provider")
@@ -254,7 +254,9 @@ class CourseSettingsUpdateInput(BaseModel):
 
     @field_validator("content_format")
     @classmethod
-    def validate_content_format(cls, v: str) -> str:
+    def validate_content_format(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
         normalized = v.strip().lower()
         if normalized not in SUPPORTED_CONTENT_FORMATS:
             raise ValueError("Unsupported content_format")

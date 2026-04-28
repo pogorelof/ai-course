@@ -166,13 +166,15 @@ export const CoursesAPI = {
   }>> {
     return apiFetch('/courses/mine', { auth: true })
   },
-  async outline(payload: { title: string; wishes: string; ai_provider: 'openai' | 'openrouter'; ai_model: string; content_format: 'text' | 'interactive'; reasoning_effort?: 'minimal' | 'low' | 'medium' | 'high'; file?: File }): Promise<{ course_id: number; topics: Array<{ id: number; title: string }> }> {
+  async outline(payload: { title: string; wishes: string; ai_provider: 'openai' | 'openrouter'; ai_model: string; content_format?: 'text' | 'interactive'; reasoning_effort?: 'minimal' | 'low' | 'medium' | 'high'; file?: File }): Promise<{ course_id: number; topics: Array<{ id: number; title: string }> }> {
     const formData = new FormData()
     formData.append('title', payload.title)
     formData.append('wishes', payload.wishes)
     formData.append('ai_provider', payload.ai_provider)
     formData.append('ai_model', payload.ai_model)
-    formData.append('content_format', payload.content_format)
+    if (payload.content_format != null) {
+      formData.append('content_format', payload.content_format)
+    }
     formData.append('reasoning_effort', payload.reasoning_effort ?? 'minimal')
     if (payload.file) {
       formData.append('file', payload.file)
@@ -302,7 +304,7 @@ export const CoursesAPI = {
   },
   async updateCourseSettings(
     courseId: number | string,
-    payload: { ai_provider: 'openai' | 'openrouter'; ai_model: string; content_format: 'text' | 'interactive'; reasoning_effort: 'minimal' | 'low' | 'medium' | 'high' }
+    payload: { ai_provider: 'openai' | 'openrouter'; ai_model: string; content_format?: 'text' | 'interactive'; reasoning_effort: 'minimal' | 'low' | 'medium' | 'high' }
   ): Promise<{ ai_provider: 'openai' | 'openrouter'; ai_model: string; content_format: 'text' | 'interactive'; reasoning_effort: 'minimal' | 'low' | 'medium' | 'high' }> {
     return apiFetch(`/courses/${courseId}/settings`, { method: 'PATCH', auth: true, body: payload })
   },

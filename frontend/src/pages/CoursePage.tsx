@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { CoursesAPI } from '../services/api'
-import type { ContentFormat, ReasoningEffort, Topic } from '../types/domain'
+import type { ReasoningEffort, Topic } from '../types/domain'
 import { PageContainer } from '../components/PageContainer'
 import { LoadingPulse } from '../components/LoadingPulse'
 import { ModelLogo } from '../components/ModelLogo'
@@ -48,7 +48,6 @@ export function CoursePage() {
   const [error, setError] = useState<string | null>(null)
   const [provider, setProvider] = useState<'openai' | 'openrouter'>('openai')
   const [model, setModel] = useState<string>('gpt-5-mini')
-  const [contentFormat, setContentFormat] = useState<ContentFormat>('text')
   const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>('minimal')
   const [modelsOpen, setModelsOpen] = useState(false)
   const [settingsLoading, setSettingsLoading] = useState(false)
@@ -81,7 +80,6 @@ export function CoursePage() {
         const settings = await CoursesAPI.courseSettings(courseId)
         setProvider(settings.ai_provider)
         setModel(settings.ai_model)
-        setContentFormat(settings.content_format)
         if (settings.reasoning_effort) setReasoningEffort(settings.reasoning_effort)
       } catch {
         // keep defaults
@@ -104,12 +102,10 @@ export function CoursePage() {
       const updated = await CoursesAPI.updateCourseSettings(courseId, {
         ai_provider: provider,
         ai_model: model,
-        content_format: contentFormat,
         reasoning_effort: reasoningEffort,
       })
       setProvider(updated.ai_provider)
       setModel(updated.ai_model)
-      setContentFormat(updated.content_format)
       if (updated.reasoning_effort) setReasoningEffort(updated.reasoning_effort)
       setSettingsStatus('Настройки сохранены')
     } catch (e) {
@@ -213,28 +209,6 @@ export function CoursePage() {
               <div className="price-note">Цены за 1M токенов: input / output</div>
               <ReasoningEffortPicker model={model} value={reasoningEffort} onChange={setReasoningEffort} />
             </div>
-            <div className="field">
-              <span>Формат главы</span>
-              <div className="provider-toggle">
-                <button
-                  type="button"
-                  className={`provider-chip ${contentFormat === 'text' ? 'provider-chip--active' : ''}`}
-                  onClick={() => setContentFormat('text')}
-                >
-                  Текстовая
-                </button>
-                <button
-                  type="button"
-                  className={`provider-chip ${contentFormat === 'interactive' ? 'provider-chip--active' : ''}`}
-                  onClick={() => setContentFormat('interactive')}
-                >
-                  Интерактивная
-                </button>
-              </div>
-              <div className="price-note">
-                Выбор влияет на поток генерации в главе: text → markdown, interactive → HTML.
-              </div>
-            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <button type="button" className="btn btn-primary" disabled={settingsLoading} onClick={saveSettings}>
                 {settingsLoading ? 'Сохраняем...' : 'Сохранить настройки'}
@@ -277,9 +251,14 @@ export function CoursePage() {
                   )}
                 </div>
               </div>
-              <Link to={`/topics/${t.id}`} className="btn btn-pill">
-                Открыть
-              </Link>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <Link to={`/topics/${t.id}?view=text`} className="btn btn-pill btn-secondary">
+                  Текст
+                </Link>
+                <Link to={`/topics/${t.id}?view=interactive`} className="btn btn-pill">
+                  Интерактив
+                </Link>
+              </div>
             </li>
           ))}
         </ul>

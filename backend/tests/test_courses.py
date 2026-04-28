@@ -120,6 +120,30 @@ def test_course_settings_get_and_update(client: TestClient, auth_headers):
     assert updated.json()["content_format"] == "interactive"
 
 
+def test_course_settings_patch_omits_content_format_keeps_previous(client: TestClient, auth_headers):
+    with patch_async("app.routers.courses.generate_course_outline", return_value=[f"A{i}" for i in range(15)]):
+        created = client.post("/courses/outline", data={"title": "Fmt", "wishes": "w"}, headers=auth_headers())
+        assert created.status_code == 200
+        course_id = created.json()["course_id"]
+
+    first = client.patch(
+        f"/courses/{course_id}/settings",
+        json={"ai_provider": "openai", "ai_model": "gpt-5-mini", "content_format": "interactive"},
+        headers=auth_headers(),
+    )
+    assert first.status_code == 200
+    assert first.json()["content_format"] == "interactive"
+
+    second = client.patch(
+        f"/courses/{course_id}/settings",
+        json={"ai_provider": "openai", "ai_model": "gpt-5.4-mini"},
+        headers=auth_headers(),
+    )
+    assert second.status_code == 200
+    assert second.json()["ai_model"] == "gpt-5.4-mini"
+    assert second.json()["content_format"] == "interactive"
+
+
 def test_legacy_topic_content_model_defaults_to_gpt4o_mini(client: TestClient, auth_headers, db_session):
     with patch_async("app.routers.courses.generate_course_outline", return_value=["Intro"] + [f"T{i}" for i in range(14)]):
         created = client.post("/courses/outline", data={"title": "Legacy", "wishes": "w"}, headers=auth_headers())

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { CoursesAPI } from '../services/api'
-import type { ContentFormat, ReasoningEffort, Topic } from '../types/domain'
+import type { ReasoningEffort, Topic } from '../types/domain'
 import { PageContainer } from '../components/PageContainer'
 import { LoadingPulse } from '../components/LoadingPulse'
 import { ModelLogo } from '../components/ModelLogo'
@@ -47,7 +47,6 @@ export function NewCoursePage() {
   const [wishes, setWishes] = useState('')
   const [aiProvider, setAiProvider] = useState<'openai' | 'openrouter'>('openai')
   const [aiModel, setAiModel] = useState<string>('gpt-5-mini')
-  const [contentFormat, setContentFormat] = useState<ContentFormat>('text')
   const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>('minimal')
   const [modelsOpen, setModelsOpen] = useState(false)
   const [file, setFile] = useState<File | undefined>(undefined)
@@ -70,7 +69,6 @@ export function NewCoursePage() {
         wishes,
         ai_provider: aiProvider,
         ai_model: aiModel,
-        content_format: contentFormat,
         reasoning_effort: reasoningEffort,
         file,
       })
@@ -125,28 +123,6 @@ export function NewCoursePage() {
                   >
                     OpenRouter
                   </button>
-                </div>
-              </div>
-              <div className="field">
-                <span>Формат главы</span>
-                <div className="provider-toggle">
-                  <button
-                    type="button"
-                    className={`provider-chip ${contentFormat === 'text' ? 'provider-chip--active' : ''}`}
-                    onClick={() => setContentFormat('text')}
-                  >
-                    Текстовая
-                  </button>
-                  <button
-                    type="button"
-                    className={`provider-chip ${contentFormat === 'interactive' ? 'provider-chip--active' : ''}`}
-                    onClick={() => setContentFormat('interactive')}
-                  >
-                    Интерактивная
-                  </button>
-                </div>
-                <div className="price-note">
-                  Текстовая: сначала генерируется markdown; интерактивная: сразу HTML-глава без генерации markdown.
                 </div>
               </div>
               <div className="field">
@@ -227,9 +203,14 @@ export function NewCoursePage() {
               {topics.map(t => (
                 <li key={t.id} className="list-row">
                   <span style={{ fontWeight: 600, lineHeight: 1.24 }}>{t.title}</span>
-                  <Link to={`/topics/${t.id}`} className="btn btn-pill">
-                    Открыть
-                  </Link>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <Link to={`/topics/${t.id}?view=text`} className="btn btn-pill btn-secondary">
+                      Текст
+                    </Link>
+                    <Link to={`/topics/${t.id}?view=interactive`} className="btn btn-pill">
+                      Интерактив
+                    </Link>
+                  </div>
                 </li>
               ))}
             </ul>

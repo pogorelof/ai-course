@@ -1004,14 +1004,15 @@ def update_course_settings(
         payload.ai_model,
         payload.reasoning_effort,
     )
-    course_content_settings = _upsert_course_content_settings(course, db, payload.content_format)
+    if payload.content_format is not None:
+        _upsert_course_content_settings(course, db, payload.content_format)
     db.commit()
     db.refresh(course_ai_settings)
-    db.refresh(course_content_settings)
+    resolved_content_format = _resolve_course_content_format(course, db)
     return CourseSettingsOut(
         ai_provider=course_ai_settings.ai_provider,
         ai_model=course_ai_settings.ai_model,
-        content_format=course_content_settings.content_format,
+        content_format=resolved_content_format,
         reasoning_effort=course_ai_settings.reasoning_effort,
     )
 

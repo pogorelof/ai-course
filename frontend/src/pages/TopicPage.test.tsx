@@ -7,7 +7,6 @@ import { TopicPage } from './TopicPage'
 const { mockCoursesApi } = vi.hoisted(() => ({
   mockCoursesApi: {
     topicMeta: vi.fn(),
-    courseSettings: vi.fn(),
     generateTopic: vi.fn(),
     streamTopic: vi.fn(),
     streamTopicHtml: vi.fn(),
@@ -64,11 +63,6 @@ describe('TopicPage quiz flow', () => {
     vi.clearAllMocks()
     storage.clear()
     mockCoursesApi.topicMeta.mockResolvedValue(baseTopicMeta)
-    mockCoursesApi.courseSettings.mockResolvedValue({
-      ai_provider: 'openai',
-      ai_model: 'gpt-5-mini',
-      content_format: 'text',
-    })
     mockCoursesApi.topicHtml.mockRejectedValue(new Error('not-found'))
     mockCoursesApi.generateTopicHtml.mockResolvedValue({
       topic_id: 100,
@@ -83,6 +77,7 @@ describe('TopicPage quiz flow', () => {
 
   it('submits quiz, shows result and resets on redo', async () => {
     localStorage.setItem('access_token', 'token')
+    mockCoursesApi.topicMeta.mockResolvedValue({ ...baseTopicMeta, has_text_content: true })
 
     mockCoursesApi.streamTopic.mockImplementation(async (_topicId: unknown, onEvent: (event: unknown) => void) => {
       onEvent({ type: 'started', topic_id: 100, course_id: 10, ai_model: 'gpt-5-mini', ai_provider: 'openai', course_title: 'Demo' })
@@ -119,7 +114,7 @@ describe('TopicPage quiz flow', () => {
     })
 
     render(
-      <MemoryRouter initialEntries={['/topics/100']}>
+      <MemoryRouter initialEntries={['/topics/100?view=text']}>
         <Routes>
           <Route path="/topics/:topicId" element={<TopicPage />} />
         </Routes>
@@ -127,6 +122,9 @@ describe('TopicPage quiz flow', () => {
     )
 
     await screen.findByText('Тест по главе')
+    await waitFor(() => {
+      expect(screen.getAllByRole('radio')).toHaveLength(20)
+    })
 
     const user = userEvent.setup()
     for (let i = 1; i <= 5; i += 1) {
@@ -153,11 +151,6 @@ describe('TopicPage interactive lesson', () => {
       ...baseTopicMeta,
       has_text_content: false,
     })
-    mockCoursesApi.courseSettings.mockResolvedValue({
-      ai_provider: 'openai',
-      ai_model: 'gpt-5-mini',
-      content_format: 'interactive',
-    })
   })
 
   it('renders existing interactive html and hides markdown content', async () => {
@@ -175,7 +168,7 @@ describe('TopicPage interactive lesson', () => {
     mockCoursesApi.streamTopicHtml.mockResolvedValue(undefined)
 
     render(
-      <MemoryRouter initialEntries={['/topics/100']}>
+      <MemoryRouter initialEntries={['/topics/100?view=interactive']}>
         <Routes>
           <Route path="/topics/:topicId" element={<TopicPage />} />
         </Routes>
@@ -209,7 +202,7 @@ describe('TopicPage interactive lesson', () => {
     })
 
     render(
-      <MemoryRouter initialEntries={['/topics/100']}>
+      <MemoryRouter initialEntries={['/topics/100?view=interactive']}>
         <Routes>
           <Route path="/topics/:topicId" element={<TopicPage />} />
         </Routes>

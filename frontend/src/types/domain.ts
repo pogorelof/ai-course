@@ -16,7 +16,7 @@ export type Course = {
 export type CourseSettings = {
   ai_provider: 'openai' | 'openrouter'
   ai_model: string
-  content_format: ContentFormat
+  content_format?: ContentFormat
   reasoning_effort: ReasoningEffort
 }
 

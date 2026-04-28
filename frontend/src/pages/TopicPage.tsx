@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { CoursesAPI } from '../services/api'
-import type { StreamEvent, TopicHtmlContentDto } from '../services/api'
-import type { ContentFormat, TopicQuiz, TopicQuizResult } from '../types/domain'
+import type { StreamEvent, TopicHtmlContentDto, TopicMetaDto } from '../services/api'
+import type { TopicQuiz, TopicQuizResult } from '../types/domain'
 import { PageContainer } from '../components/PageContainer'
 import { LoadingPulse } from '../components/LoadingPulse'
 import { MarkdownRenderer } from '../components/MarkdownRenderer'
 import { InteractiveContentFrame } from '../components/InteractiveContentFrame'
 import { ModelLogo } from '../components/ModelLogo'
+
+export type TopicViewMode = 'text' | 'interactive'
 
 function formatGeneratedAt(value: string | null | undefined): string | null {
   if (!value) return null
@@ -20,16 +22,31 @@ function formatGeneratedAt(value: string | null | undefined): string | null {
   }
 }
 
+function parseViewParam(raw: string | null): TopicViewMode | null {
+  if (raw === 'text' || raw === 'interactive') return raw
+  return null
+}
+
+function defaultViewFromMeta(meta: TopicMetaDto | null): TopicViewMode {
+  if (!meta) return 'text'
+  if (meta.has_text_content && !meta.has_html_content) return 'text'
+  if (meta.has_html_content && !meta.has_text_content) return 'interactive'
+  return 'text'
+}
+
 export function TopicPage() {
   const token = typeof localStorage !== 'undefined' ? localStorage.getItem('access_token') : null
   const { topicId } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const viewParam = searchParams.get('view')
+
+  const [meta, setMeta] = useState<TopicMetaDto | null>(null)
+  const [metaLoading, setMetaLoading] = useState(false)
   const [content, setContent] = useState<string | null>(null)
   const [title, setTitle] = useState<string | null>(null)
   const [courseId, setCourseId] = useState<number | null>(null)
   const [contentModel, setContentModel] = useState<string | null>(null)
-  const [contentFormat, setContentFormat] = useState<ContentFormat>('text')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [textError, setTextError] = useState<string | null>(null)
   const [quiz, setQuiz] = useState<TopicQuiz | null>(null)
   const [quizLoading, setQuizLoading] = useState(false)
   const [quizError, setQuizError] = useState<string | null>(null)
@@ -40,25 +57,31 @@ export function TopicPage() {
   const [htmlLesson, setHtmlLesson] = useState<TopicHtmlContentDto | null>(null)
   const [htmlLessonLoading, setHtmlLessonLoading] = useState(false)
   const [htmlLessonError, setHtmlLessonError] = useState<string | null>(null)
+  const [htmlFetchLoading, setHtmlFetchLoading] = useState(false)
   const [streaming, setStreaming] = useState(false)
   const [streamedBytes, setStreamedBytes] = useState(0)
   const streamAbortRef = useRef<AbortController | null>(null)
+  /** Avoids re-streaming markdown when returning to the «Текст» tab for the same topic. */
+  const textStreamCompletedKeyRef = useRef<string | null>(null)
+
+  const view: TopicViewMode = parseViewParam(viewParam) ?? defaultViewFromMeta(meta)
+
+  /** Quiz uses markdown; avoid re-fetching on every streamed chunk. */
+  const textReadyForQuiz = Boolean(
+    meta && (meta.has_text_content || (!streaming && !!content && content.length > 0)),
+  )
 
   useEffect(() => {
     let cancelled = false
-    const controller = new AbortController()
-    streamAbortRef.current?.abort()
-    streamAbortRef.current = controller
-
     const run = async () => {
       if (!token || !topicId) return
-      setLoading(true)
-      setError(null)
+      setMetaLoading(true)
+      setMeta(null)
       setContent(null)
       setTitle(null)
       setCourseId(null)
       setContentModel(null)
-      setContentFormat('text')
+      setTextError(null)
       setQuiz(null)
       setQuizLoading(false)
       setQuizError(null)
@@ -69,107 +92,102 @@ export function TopicPage() {
       setHtmlLessonError(null)
       setStreaming(false)
       setStreamedBytes(0)
+      textStreamCompletedKeyRef.current = null
       try {
-        const meta = await CoursesAPI.topicMeta(topicId)
+        const m = await CoursesAPI.topicMeta(topicId)
         if (cancelled) return
-        setTitle(meta.course_title)
-        setCourseId(meta.course_id)
-        setContentModel(meta.content_ai_model ?? null)
+        setMeta(m)
+        setTitle(m.course_title)
+        setCourseId(m.course_id)
+        setContentModel(m.content_ai_model ?? null)
+      } catch {
+        if (!cancelled) setTextError('Не удалось загрузить главу')
+      } finally {
+        if (!cancelled) setMetaLoading(false)
+      }
+    }
+    run()
+    return () => {
+      cancelled = true
+    }
+  }, [token, topicId])
 
-        const settings = await CoursesAPI.courseSettings(meta.course_id)
-        if (cancelled) return
-        setContentFormat(settings.content_format)
+  useEffect(() => {
+    if (!meta || !topicId) return
+    if (parseViewParam(viewParam) !== null) return
+    setSearchParams(
+      prev => {
+        const next = new URLSearchParams(prev)
+        next.set('view', defaultViewFromMeta(meta))
+        return next
+      },
+      { replace: true },
+    )
+  }, [meta, topicId, viewParam, setSearchParams])
 
-        if (settings.content_format === 'text') {
-          let accumulated = ''
-          let usedCache = false
-          setLoading(false)
-          setStreaming(true)
-          await CoursesAPI.streamTopic(
-            topicId,
-            (event: StreamEvent) => {
-              if (cancelled) return
-              if (event.type === 'started') {
-                setTitle(event.course_title)
-                setCourseId(event.course_id)
-                setContentModel(event.ai_model)
-              } else if (event.type === 'cached') {
-                usedCache = true
+  useEffect(() => {
+    if (!token || !topicId || !meta) return
+    if (view !== 'text') return
+
+    const streamKey = `${topicId}:text`
+    if (textStreamCompletedKeyRef.current === streamKey) {
+      return
+    }
+
+    let cancelled = false
+    const controller = new AbortController()
+    streamAbortRef.current?.abort()
+    streamAbortRef.current = controller
+
+    const run = async () => {
+      setTextError(null)
+      setStreaming(true)
+      setStreamedBytes(0)
+      let accumulated = ''
+      let usedCache = false
+      try {
+        await CoursesAPI.streamTopic(
+          topicId,
+          (event: StreamEvent) => {
+            if (cancelled) return
+            if (event.type === 'started') {
+              setTitle(event.course_title)
+              setCourseId(event.course_id)
+              setContentModel(event.ai_model)
+            } else if (event.type === 'cached') {
+              usedCache = true
+              accumulated = event.content
+              setContent(event.content)
+              setContentModel(event.ai_model)
+              setStreamedBytes(event.content.length)
+            } else if (event.type === 'chunk') {
+              accumulated += event.delta
+              setContent(accumulated)
+              setStreamedBytes(accumulated.length)
+            } else if (event.type === 'done') {
+              if (event.content && !usedCache) {
                 accumulated = event.content
                 setContent(event.content)
-                setContentModel(event.ai_model)
-                setStreamedBytes(event.content.length)
-              } else if (event.type === 'chunk') {
-                accumulated += event.delta
-                setContent(accumulated)
-                setStreamedBytes(accumulated.length)
-              } else if (event.type === 'done') {
-                if (event.content && !usedCache) {
-                  accumulated = event.content
-                  setContent(event.content)
-                }
-                if (event.ai_model) setContentModel(event.ai_model)
-              } else if (event.type === 'error') {
-                throw new Error(event.detail || 'stream error')
               }
-            },
-            controller.signal,
-          )
-          if (cancelled) return
-          setStreaming(false)
-          if (!accumulated) {
-            setError('Не удалось сгенерировать контент')
-          }
-        } else {
-          setContent(null)
-          try {
-            const lesson = await CoursesAPI.topicHtml(topicId)
-            if (cancelled) return
-            setHtmlLesson(lesson)
-            setContentModel(lesson.ai_model)
-          } catch {
-            if (!cancelled) setHtmlLesson(null)
-          }
-        }
-
-        const canUseQuiz = settings.content_format === 'text' || meta.has_text_content
-        if (canUseQuiz) {
-          setQuizLoading(true)
-          try {
-            const loadedQuiz = await CoursesAPI.topicQuiz(topicId)
-            if (cancelled) return
-            setQuiz(loadedQuiz)
-            setQuizResult(loadedQuiz.last_result ?? null)
-          } catch {
-            if (cancelled) return
-            if (settings.content_format === 'text') {
-              try {
-                const generatedQuiz = await CoursesAPI.generateTopicQuiz(topicId)
-                if (cancelled) return
-                setQuiz(generatedQuiz)
-                setQuizResult(generatedQuiz.last_result ?? null)
-              } catch {
-                if (!cancelled) setQuizError('Ошибка загрузки теста')
-              }
-            } else {
-              setQuiz(null)
-              setQuizNotice('Тест пока недоступен: для новых интерактивных глав текстовый контент не генерируется автоматически.')
+              if (event.ai_model) setContentModel(event.ai_model)
+            } else if (event.type === 'error') {
+              throw new Error(event.detail || 'stream error')
             }
-          } finally {
-            if (!cancelled) setQuizLoading(false)
-          }
+          },
+          controller.signal,
+        )
+        if (cancelled) return
+        if (!accumulated) {
+          setTextError('Не удалось сгенерировать контент')
         } else {
-          setQuiz(null)
-          setQuizLoading(false)
-          setQuizNotice('Тест недоступен для интерактивного формата, пока не сгенерирован текстовый контент.')
+          textStreamCompletedKeyRef.current = streamKey
         }
       } catch (err) {
         if (cancelled) return
         if ((err as Error).name === 'AbortError') return
-        setError('Ошибка генерации контента')
-        setStreaming(false)
+        setTextError('Ошибка генерации контента')
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) setStreaming(false)
       }
     }
     run()
@@ -177,14 +195,89 @@ export function TopicPage() {
       cancelled = true
       controller.abort()
     }
-  }, [token, topicId])
+  }, [token, topicId, meta?.topic_id, view, meta])
+
+  useEffect(() => {
+    if (!token || !topicId || !meta) return
+    if (view !== 'interactive') return
+
+    let cancelled = false
+    setHtmlFetchLoading(true)
+    setHtmlLessonError(null)
+    ;(async () => {
+      try {
+        const lesson = await CoursesAPI.topicHtml(topicId)
+        if (!cancelled) {
+          setHtmlLesson(lesson)
+          setContentModel(lesson.ai_model)
+        }
+      } catch {
+        if (!cancelled) setHtmlLesson(null)
+      } finally {
+        if (!cancelled) setHtmlFetchLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [token, topicId, meta?.topic_id, view, meta])
+
+  useEffect(() => {
+    if (!token || !topicId || !meta) return
+
+    if (!textReadyForQuiz) {
+      setQuiz(null)
+      setQuizLoading(false)
+      setQuizNotice('Тест доступен после того, как сгенерирована текстовая версия главы (вкладка «Текст»).')
+      return
+    }
+
+    let cancelled = false
+    setQuizNotice(null)
+    setQuizLoading(true)
+    setQuizError(null)
+    ;(async () => {
+      try {
+        const loadedQuiz = await CoursesAPI.topicQuiz(topicId)
+        if (cancelled) return
+        setQuiz(loadedQuiz)
+        setQuizResult(loadedQuiz.last_result ?? null)
+      } catch {
+        if (cancelled) return
+        try {
+          const generatedQuiz = await CoursesAPI.generateTopicQuiz(topicId)
+          if (!cancelled) {
+            setQuiz(generatedQuiz)
+            setQuizResult(generatedQuiz.last_result ?? null)
+          }
+        } catch {
+          if (!cancelled) setQuizError('Ошибка загрузки теста')
+        }
+      } finally {
+        if (!cancelled) setQuizLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [token, topicId, meta?.topic_id, textReadyForQuiz])
+
+  const setView = (next: TopicViewMode) => {
+    setSearchParams(
+      prev => {
+        const p = new URLSearchParams(prev)
+        p.set('view', next)
+        return p
+      },
+      { replace: true },
+    )
+  }
 
   const handleGenerateInteractiveLesson = async () => {
-    if (!topicId || htmlLessonLoading || contentFormat !== 'interactive') return
+    if (!topicId || htmlLessonLoading) return
     setHtmlLessonLoading(true)
     setHtmlLessonError(null)
     setStreamedBytes(0)
-    setStreaming(true)
     const controller = new AbortController()
     streamAbortRef.current?.abort()
     streamAbortRef.current = controller
@@ -193,7 +286,7 @@ export function TopicPage() {
       let errorDetail: string | null = null
       await CoursesAPI.streamTopicHtml(
         topicId,
-        (event) => {
+        event => {
           if (event.type === 'chunk') {
             accumulated += event.delta
             setStreamedBytes(accumulated.length)
@@ -223,7 +316,6 @@ export function TopicPage() {
       }
     } finally {
       setHtmlLessonLoading(false)
-      setStreaming(false)
     }
   }
 
@@ -268,22 +360,37 @@ export function TopicPage() {
 
   const formattedGeneratedAt = formatGeneratedAt(htmlLesson?.generated_at)
 
+  const pageReady = !metaLoading && meta
+
   return (
     <PageContainer fullWidth>
       <div className="section-stack" style={{ width: '100%', maxWidth: 1440, margin: '0 auto' }}>
-        {loading ? (
+        {metaLoading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, paddingTop: 8 }}>
             <LoadingPulse />
             <span>Загружаем главу...</span>
           </div>
         ) : (
           <>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', width: '100%', maxWidth: 1360, margin: '0 auto' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: 12,
+                flexWrap: 'wrap',
+                width: '100%',
+                maxWidth: 1360,
+                margin: '0 auto',
+              }}
+            >
               <div style={{ display: 'grid', gap: 6 }}>
                 <h1 className="page-hero-title">{title ? `Курс: ${title}` : 'Глава курса'}</h1>
-                <span className="topic-badge topic-badge--interactive" style={{ width: 'fit-content' }}>
-                  Формат: {contentFormat === 'interactive' ? 'интерактивный' : 'текстовый'}
-                </span>
+                {meta?.topic_title && (
+                  <p className="page-subtitle" style={{ margin: 0 }}>
+                    Тема: {meta.topic_title}
+                  </p>
+                )}
                 {contentModel && (
                   <div className="topic-model-inline">
                     <ModelLogo size={11} model={contentModel} />
@@ -297,13 +404,43 @@ export function TopicPage() {
                 </Link>
               )}
             </div>
-            {error && <p className="status-error" style={{ textAlign: 'center' }}>{error}</p>}
 
-            {contentFormat === 'interactive' && (htmlLesson || htmlLessonLoading || !error) && (
-              <div
-                className="interactive-lesson-bar"
-                style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}
-              >
+            {pageReady && (
+              <div className="topic-view-tabs" style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}>
+                <div className="provider-toggle" role="tablist" aria-label="Версия главы">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={view === 'text'}
+                    className={`provider-chip ${view === 'text' ? 'provider-chip--active' : ''}`}
+                    onClick={() => setView('text')}
+                  >
+                    Текст
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={view === 'interactive'}
+                    className={`provider-chip ${view === 'interactive' ? 'provider-chip--active' : ''}`}
+                    onClick={() => setView('interactive')}
+                  >
+                    Интерактив
+                  </button>
+                </div>
+                <p className="status-muted" style={{ margin: '8px 0 0', fontSize: '0.9rem' }}>
+                  Две версии независимы: markdown для чтения и теста, HTML — отдельная интерактивная страница.
+                </p>
+              </div>
+            )}
+
+            {textError && view === 'text' && (
+              <p className="status-error" style={{ textAlign: 'center' }}>
+                {textError}
+              </p>
+            )}
+
+            {view === 'interactive' && (
+              <div className="interactive-lesson-bar" style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}>
                 <div className="interactive-lesson-bar-info">
                   {htmlLesson ? (
                     <>
@@ -329,20 +466,18 @@ export function TopicPage() {
                     onClick={handleGenerateInteractiveLesson}
                     disabled={htmlLessonLoading}
                   >
-                    {htmlLessonLoading
-                      ? 'Генерируем...'
-                      : htmlLesson
-                        ? 'Перегенерировать'
-                        : 'Сгенерировать интерактивную главу'}
+                    {htmlLessonLoading ? 'Генерируем...' : htmlLesson ? 'Перегенерировать' : 'Сгенерировать интерактивную главу'}
                   </button>
                 </div>
                 {htmlLessonError && (
-                  <p className="status-error" style={{ width: '100%', margin: 0 }}>{htmlLessonError}</p>
+                  <p className="status-error" style={{ width: '100%', margin: 0 }}>
+                    {htmlLessonError}
+                  </p>
                 )}
               </div>
             )}
 
-            {contentFormat === 'interactive' && htmlLessonLoading && !htmlLesson && (
+            {view === 'interactive' && htmlLessonLoading && !htmlLesson && (
               <div
                 className="surface-card surface-card--light"
                 style={{ width: '100%', maxWidth: 1360, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 10 }}
@@ -355,8 +490,16 @@ export function TopicPage() {
               </div>
             )}
 
-            {contentFormat === 'interactive' ? (
-              htmlLesson ? (
+            {view === 'interactive' ? (
+              htmlFetchLoading && !htmlLesson && !htmlLessonLoading ? (
+                <div
+                  className="surface-card surface-card--light"
+                  style={{ width: '100%', maxWidth: 1360, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 10 }}
+                >
+                  <LoadingPulse />
+                  <span>Загружаем интерактивную версию…</span>
+                </div>
+              ) : htmlLesson ? (
                 <div style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}>
                   <InteractiveContentFrame html={htmlLesson.html} title={`Глава: ${title ?? ''}`} />
                 </div>
@@ -374,13 +517,18 @@ export function TopicPage() {
                     {streaming && (
                       <div className="status-muted" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                         <LoadingPulse />
-                        <span>Стрим… {streamedBytes > 0 ? `получено ${streamedBytes.toLocaleString('ru-RU')} символов` : ''}</span>
+                        <span>
+                          Стрим… {streamedBytes > 0 ? `получено ${streamedBytes.toLocaleString('ru-RU')} символов` : ''}
+                        </span>
                       </div>
                     )}
                     <MarkdownRenderer markdown={content} />
                   </div>
                 ) : streaming ? (
-                  <div className="surface-card surface-card--light" style={{ width: '100%', maxWidth: 1360, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div
+                    className="surface-card surface-card--light"
+                    style={{ width: '100%', maxWidth: 1360, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 10 }}
+                  >
                     <LoadingPulse />
                     <span>Подключаемся к модели и ждём первый токен…</span>
                   </div>
@@ -397,7 +545,9 @@ export function TopicPage() {
             <section className="surface-card surface-card--light quiz-card" style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}>
               <div className="section-stack" style={{ gap: 16 }}>
                 <div>
-                  <h2 className="page-title" style={{ marginBottom: 8 }}>Тест по главе</h2>
+                  <h2 className="page-title" style={{ marginBottom: 8 }}>
+                    Тест по главе
+                  </h2>
                   <p className="page-subtitle">5 вопросов для проверки понимания материала.</p>
                   {quiz?.progress.has_attempts && (
                     <p className="status-muted" style={{ marginTop: 8 }}>
@@ -421,17 +571,24 @@ export function TopicPage() {
                     <div className="quiz-list">
                       {quiz.questions.map((question, index) => (
                         <div key={question.id} className="quiz-question">
-                          <p className="quiz-question-title">{index + 1}. {question.question_text}</p>
-                          {quizResult && (() => {
-                            const questionResult = getQuestionResult(question.id)
-                            if (!questionResult) return null
-                            const isCorrect = questionResult.selected_option_index === questionResult.correct_option_index
-                            return (
-                              <div className={isCorrect ? 'quiz-question-status quiz-question-status--correct' : 'quiz-question-status quiz-question-status--wrong'}>
-                                {isCorrect ? 'Верно' : 'Неверно'}
-                              </div>
-                            )
-                          })()}
+                          <p className="quiz-question-title">
+                            {index + 1}. {question.question_text}
+                          </p>
+                          {quizResult &&
+                            (() => {
+                              const questionResult = getQuestionResult(question.id)
+                              if (!questionResult) return null
+                              const isCorrect = questionResult.selected_option_index === questionResult.correct_option_index
+                              return (
+                                <div
+                                  className={
+                                    isCorrect ? 'quiz-question-status quiz-question-status--correct' : 'quiz-question-status quiz-question-status--wrong'
+                                  }
+                                >
+                                  {isCorrect ? 'Верно' : 'Неверно'}
+                                </div>
+                              )
+                            })()}
                           <div className="quiz-options">
                             {question.options.map((option, optionIndex) => (
                               <label key={`${question.id}_${optionIndex}`} className="quiz-option">
@@ -445,21 +602,22 @@ export function TopicPage() {
                               </label>
                             ))}
                           </div>
-                          {quizResult && (() => {
-                            const questionResult = getQuestionResult(question.id)
-                            if (!questionResult) return null
-                            const isCorrect = questionResult.selected_option_index === questionResult.correct_option_index
-                            if (isCorrect) return null
-                            return (
-                              <div className="quiz-inline-advice">
-                                <p style={{ margin: 0 }}>
-                                  Ваш ответ: {question.options[questionResult.selected_option_index] ?? '—'}.
-                                  Правильный: {question.options[questionResult.correct_option_index] ?? '—'}.
-                                </p>
-                                <p style={{ margin: 0 }}>{questionResult.advice}</p>
-                              </div>
-                            )
-                          })()}
+                          {quizResult &&
+                            (() => {
+                              const questionResult = getQuestionResult(question.id)
+                              if (!questionResult) return null
+                              const isCorrect = questionResult.selected_option_index === questionResult.correct_option_index
+                              if (isCorrect) return null
+                              return (
+                                <div className="quiz-inline-advice">
+                                  <p style={{ margin: 0 }}>
+                                    Ваш ответ: {question.options[questionResult.selected_option_index] ?? '—'}. Правильный:{' '}
+                                    {question.options[questionResult.correct_option_index] ?? '—'}.
+                                  </p>
+                                  <p style={{ margin: 0 }}>{questionResult.advice}</p>
+                                </div>
+                              )
+                            })()}
                         </div>
                       ))}
                     </div>
@@ -485,7 +643,9 @@ export function TopicPage() {
                         Советы добавлены прямо под каждым неверным вопросом.
                       </p>
                     ) : (
-                      <p className="status-muted" style={{ margin: 0 }}>Отличная работа! Все ответы верные.</p>
+                      <p className="status-muted" style={{ margin: 0 }}>
+                        Отличная работа! Все ответы верные.
+                      </p>
                     )}
                   </div>
                 )}
