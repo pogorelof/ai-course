@@ -367,6 +367,16 @@ textarea {
   cursor: pointer;
 }
 
+.model-card-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.model-card-row .model-card {
+  flex: 1;
+}
+
 .model-card-title {
   display: inline-flex;
   align-items: center;
@@ -386,6 +396,37 @@ textarea {
 .model-card--active {
   border-color: var(--color-link-blue);
   background: rgba(0, 102, 204, 0.05);
+}
+
+.model-nitro-btn {
+  border: 1px solid #111;
+  border-radius: 10px;
+  background: #fff;
+  width: 40px;
+  min-width: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+}
+
+.model-nitro-btn--active {
+  border-color: #7c3aed;
+  background: #7c3aed;
+}
+
+.model-nitro-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  background-color: #111;
+  mask: url('/lightning.svg') no-repeat center / contain;
+  -webkit-mask: url('/lightning.svg') no-repeat center / contain;
+}
+
+.model-nitro-btn--active .model-nitro-icon {
+  background-color: #facc15;
 }
 
 .topic-meta-block {

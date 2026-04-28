@@ -14,6 +14,7 @@ const OPENAI_MODELS = [
   { id: 'gpt-5-mini', label: 'gpt-5-mini', inputPrice: '$0.25', outputPrice: '$2' },
   { id: 'gpt-5-nano', label: 'gpt-5-nano', inputPrice: '$0.05', outputPrice: '$0.4' },
 ] as const
+const NITRO_SUFFIX = ':nitro'
 const OPENROUTER_MODELS = [
   { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash', inputPrice: '$0.14', outputPrice: '$0.28' },
   { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro', inputPrice: '$1.74', outputPrice: '$3.48' },
@@ -22,9 +23,13 @@ const OPENROUTER_MODELS = [
   { id: 'claude-haiku-4.5', label: 'claude-haiku-4.5', inputPrice: '$1', outputPrice: '$5' },
   { id: 'gemini-3.1-pro-preview', label: 'gemini-3.1-pro-preview', inputPrice: '$2', outputPrice: '$12' },
   { id: 'gemini-3-flash-preview', label: 'gemini-3-flash-preview', inputPrice: '$0.5', outputPrice: '$3' },
-  { id: 'google/gemma-4-31b-it:nitro', label: 'google/gemma-4-31b-it:nitro', inputPrice: '$0.13', outputPrice: '$0.38' },
-  { id: 'openai/gpt-oss-120b:nitro', label: 'openai/gpt-oss-120b:nitro', inputPrice: '$0.35', outputPrice: '$0.75' },
+  { id: 'google/gemma-4-31b-it', label: 'google/gemma-4-31b-it', inputPrice: '$0.13', outputPrice: '$0.38' },
+  { id: 'openai/gpt-oss-120b', label: 'openai/gpt-oss-120b', inputPrice: '$0.35', outputPrice: '$0.75' },
 ] as const
+
+const isNitroModel = (modelId: string) => modelId.endsWith(NITRO_SUFFIX)
+const baseModelId = (modelId: string) => (isNitroModel(modelId) ? modelId.slice(0, -NITRO_SUFFIX.length) : modelId)
+const nitroModelId = (modelId: string) => (isNitroModel(modelId) ? modelId : `${modelId}${NITRO_SUFFIX}`)
 
 export function NewCoursePage() {
   const token = typeof localStorage !== 'undefined' ? localStorage.getItem('access_token') : null
@@ -40,6 +45,8 @@ export function NewCoursePage() {
   const [topics, setTopics] = useState<Topic[]>([])
   const [createdCourseId, setCreatedCourseId] = useState<number | null>(null)
   const models = aiProvider === 'openrouter' ? OPENROUTER_MODELS : OPENAI_MODELS
+  const selectedModelId = aiProvider === 'openrouter' ? baseModelId(aiModel) : aiModel
+  const selectedModel = models.find(item => item.id === selectedModelId)
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -117,33 +124,48 @@ export function NewCoursePage() {
                   >
                     <span className="model-trigger-title">
                       <ModelLogo size={14} provider={aiProvider} model={aiModel} />
-                      <span>{models.find(item => item.id === aiModel)?.label ?? aiModel}</span>
+                      <span>{selectedModel?.label ?? aiModel}</span>
                     </span>
                     <span className="model-dropdown-hint">
-                      input {models.find(item => item.id === aiModel)?.inputPrice} / output {models.find(item => item.id === aiModel)?.outputPrice}
+                      input {selectedModel?.inputPrice ?? '—'} / output {selectedModel?.outputPrice ?? '—'}
                     </span>
                   </button>
                   {modelsOpen && (
                     <div className="model-dropdown-panel">
                       {models.map((item) => (
-                        <button
-                          type="button"
-                          key={item.id}
-                          className={`model-card ${aiModel === item.id ? 'model-card--active' : ''}`}
-                          onClick={() => {
-                            setAiModel(item.id)
-                            setModelsOpen(false)
-                          }}
-                        >
-                          <div className="model-card-title">
-                            <ModelLogo size={14} provider={aiProvider} model={item.id} />
-                            <span>{item.label}</span>
-                          </div>
-                          <div className="model-card-prices">
-                            <span>Input: {item.inputPrice}</span>
-                            <span>Output: {item.outputPrice}</span>
-                          </div>
-                        </button>
+                        <div key={item.id} className="model-card-row">
+                          <button
+                            type="button"
+                            className={`model-card ${aiModel === item.id ? 'model-card--active' : ''}`}
+                            onClick={() => {
+                              setAiModel(item.id)
+                              setModelsOpen(false)
+                            }}
+                          >
+                            <div className="model-card-title">
+                              <ModelLogo size={14} provider={aiProvider} model={item.id} />
+                              <span>{item.label}</span>
+                            </div>
+                            <div className="model-card-prices">
+                              <span>Input: {item.inputPrice}</span>
+                              <span>Output: {item.outputPrice}</span>
+                            </div>
+                          </button>
+                          {aiProvider === 'openrouter' && (
+                            <button
+                              type="button"
+                              className={`model-nitro-btn ${aiModel === nitroModelId(item.id) ? 'model-nitro-btn--active' : ''}`}
+                              onClick={() => {
+                                setAiModel(nitroModelId(item.id))
+                                setModelsOpen(false)
+                              }}
+                              aria-label={`Включить Nitro для ${item.label}`}
+                              title={`Nitro для ${item.label}`}
+                            >
+                              <span className="model-nitro-icon" aria-hidden="true" />
+                            </button>
+                          )}
+                        </div>
                       ))}
                     </div>
                   )}

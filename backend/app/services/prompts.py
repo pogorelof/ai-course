@@ -27,7 +27,11 @@ TOPIC_CONTENT_SYSTEM_PROMPT = (
     "Avoid bullet lists unless they are clearly the best format. "
     "When sequence matters, prefer short numbered lists over bullets. "
     "Aim for a human, engaging reading flow with transitions between sections. "
-    "When useful, include fenced code blocks with language tags and short explanations. "
+    "Use fenced code blocks ONLY when the subject is inherently technical/programming-related "
+    "or when the user explicitly asks for code. "
+    "For non-technical subjects (e.g., psychology, history, literature, management, law, medicine in non-programming context), "
+    "do not include programming code, pseudo-code, scripts, or implementation snippets. "
+    "In such subjects, use conceptual examples, scenarios, analogies, and practical non-code exercises instead. "
     "Include at least one well-formatted Markdown table when the topic allows comparison, decision criteria, trade-offs, or summaries. "
     "Prefer clarity, smooth narrative flow, and practical insight over generic text. "
     "Cover pitfalls, edge cases, and best practices naturally inside the lesson sections. "
@@ -46,6 +50,7 @@ TOPIC_QUIZ_SYSTEM_PROMPT = (
     "Generate exactly 5 multiple-choice questions strictly based on the provided chapter content. "
     "Each question must have exactly 4 options and exactly 1 correct option. "
     "Also generate one short universal corrective advice for each question that can help a learner if they answer it wrong. "
+    "Language rule: all question_text, options, and advice MUST be in Russian only. "
     "Return JSON only with this schema: "
     '{"questions":[{"question_text":"...","options":["...","...","...","..."],"correct_option_index":0,"advice":"..."}]}. '
     "Rules: no markdown, no comments, no extra keys, no trailing text."
@@ -54,6 +59,7 @@ TOPIC_QUIZ_SYSTEM_PROMPT = (
 QUIZ_ADVICE_SYSTEM_PROMPT = (
     "You are a supportive tutor. "
     "Given chapter content and a list of incorrectly answered quiz questions, produce short corrective advice. "
+    "Language rule: all advice text MUST be in Russian only. "
     "Return JSON only with this schema: "
     '{"advices":[{"question_index":0,"advice":"..."}]}. '
     "Advice must explain the concept, why the selected answer is wrong, and how to avoid the mistake next time. "

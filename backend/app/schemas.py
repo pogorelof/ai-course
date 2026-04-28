@@ -10,7 +10,7 @@ SUPPORTED_OPENAI_MODELS = (
     "gpt-5-mini",
     "gpt-5-nano",
 )
-SUPPORTED_OPENROUTER_MODELS = (
+SUPPORTED_OPENROUTER_BASE_MODELS = (
     "deepseek-v4-flash",
     "deepseek-v4-pro",
     "claude-opus-4.7",
@@ -18,9 +18,19 @@ SUPPORTED_OPENROUTER_MODELS = (
     "claude-haiku-4.5",
     "gemini-3.1-pro-preview",
     "gemini-3-flash-preview",
-    "google/gemma-4-31b-it:nitro",
-    "openai/gpt-oss-120b:nitro",
+    "google/gemma-4-31b-it",
+    "openai/gpt-oss-120b",
 )
+NITRO_SUFFIX = ":nitro"
+
+
+def _is_supported_openrouter_model(model: str) -> bool:
+    normalized = model.strip()
+    if not normalized:
+        return False
+    if normalized.endswith(NITRO_SUFFIX):
+        normalized = normalized[: -len(NITRO_SUFFIX)]
+    return normalized in SUPPORTED_OPENROUTER_BASE_MODELS
 
 
 class UserCreate(BaseModel):
@@ -84,7 +94,7 @@ class CourseCreate(BaseModel):
     def validate_provider_model(self):
         if self.ai_provider == "openai" and self.ai_model not in SUPPORTED_OPENAI_MODELS:
             raise ValueError("Unsupported ai_model for openai")
-        if self.ai_provider == "openrouter" and self.ai_model not in SUPPORTED_OPENROUTER_MODELS:
+        if self.ai_provider == "openrouter" and not _is_supported_openrouter_model(self.ai_model):
             raise ValueError("Unsupported ai_model for openrouter")
         return self
 
@@ -193,7 +203,7 @@ class CourseSettingsUpdateInput(BaseModel):
     def validate_provider_model(self):
         if self.ai_provider == "openai" and self.ai_model not in SUPPORTED_OPENAI_MODELS:
             raise ValueError("Unsupported ai_model for openai")
-        if self.ai_provider == "openrouter" and self.ai_model not in SUPPORTED_OPENROUTER_MODELS:
+        if self.ai_provider == "openrouter" and not _is_supported_openrouter_model(self.ai_model):
             raise ValueError("Unsupported ai_model for openrouter")
         return self
 
