@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from typing import List, Optional
 
 SUPPORTED_AI_PROVIDERS = ("openai", "openrouter")
@@ -9,6 +9,17 @@ SUPPORTED_OPENAI_MODELS = (
     "gpt-5.4-nano",
     "gpt-5-mini",
     "gpt-5-nano",
+)
+SUPPORTED_OPENROUTER_MODELS = (
+    "deepseek-v4-flash",
+    "deepseek-v4-pro",
+    "claude-opus-4.7",
+    "claude-sonnet-4.6",
+    "claude-haiku-4.5",
+    "gemini-3.1-pro-preview",
+    "gemini-3-flash-preview",
+    "google/gemma-4-31b-it:nitro",
+    "openai/gpt-oss-120b:nitro",
 )
 
 
@@ -62,10 +73,20 @@ class CourseCreate(BaseModel):
     @field_validator("ai_model")
     @classmethod
     def validate_ai_model(cls, v: str) -> str:
-        normalized = v.strip()
-        if normalized not in SUPPORTED_OPENAI_MODELS:
-            raise ValueError("Unsupported ai_model")
-        return normalized
+        return v.strip()
+
+    @field_validator("wishes", "title")
+    @classmethod
+    def trim_text_fields(cls, v: str) -> str:
+        return v.strip()
+
+    @model_validator(mode="after")
+    def validate_provider_model(self):
+        if self.ai_provider == "openai" and self.ai_model not in SUPPORTED_OPENAI_MODELS:
+            raise ValueError("Unsupported ai_model for openai")
+        if self.ai_provider == "openrouter" and self.ai_model not in SUPPORTED_OPENROUTER_MODELS:
+            raise ValueError("Unsupported ai_model for openrouter")
+        return self
 
 class CourseOut(BaseModel):
     id: int
@@ -166,10 +187,15 @@ class CourseSettingsUpdateInput(BaseModel):
     @field_validator("ai_model")
     @classmethod
     def validate_ai_model(cls, v: str) -> str:
-        normalized = v.strip()
-        if normalized not in SUPPORTED_OPENAI_MODELS:
-            raise ValueError("Unsupported ai_model")
-        return normalized
+        return v.strip()
+
+    @model_validator(mode="after")
+    def validate_provider_model(self):
+        if self.ai_provider == "openai" and self.ai_model not in SUPPORTED_OPENAI_MODELS:
+            raise ValueError("Unsupported ai_model for openai")
+        if self.ai_provider == "openrouter" and self.ai_model not in SUPPORTED_OPENROUTER_MODELS:
+            raise ValueError("Unsupported ai_model for openrouter")
+        return self
 
 class CourseSettingsOut(BaseModel):
     ai_provider: str

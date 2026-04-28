@@ -4,7 +4,7 @@ import { CoursesAPI } from '../services/api'
 import type { Topic } from '../types/domain'
 import { PageContainer } from '../components/PageContainer'
 import { LoadingPulse } from '../components/LoadingPulse'
-import { OpenAILogo } from '../components/OpenAILogo'
+import { ModelLogo } from '../components/ModelLogo'
 
 const OPENAI_MODELS = [
   { id: 'gpt-5.5', label: 'gpt-5.5', inputPrice: '$5', outputPrice: '$30' },
@@ -14,12 +14,17 @@ const OPENAI_MODELS = [
   { id: 'gpt-5-mini', label: 'gpt-5-mini', inputPrice: '$0.25', outputPrice: '$2' },
   { id: 'gpt-5-nano', label: 'gpt-5-nano', inputPrice: '$0.05', outputPrice: '$0.4' },
 ] as const
-
-const isOpenAIModel = (model: string | null | undefined) => {
-  if (!model) return false
-  const normalized = model.toLowerCase()
-  return normalized.startsWith('gpt-') || normalized.startsWith('o1') || normalized.startsWith('o3') || normalized.startsWith('o4')
-}
+const OPENROUTER_MODELS = [
+  { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash', inputPrice: '$0.14', outputPrice: '$0.28' },
+  { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro', inputPrice: '$1.74', outputPrice: '$3.48' },
+  { id: 'claude-opus-4.7', label: 'claude-opus-4.7', inputPrice: '$5', outputPrice: '$25' },
+  { id: 'claude-sonnet-4.6', label: 'claude-sonnet-4.6', inputPrice: '$3', outputPrice: '$15' },
+  { id: 'claude-haiku-4.5', label: 'claude-haiku-4.5', inputPrice: '$1', outputPrice: '$5' },
+  { id: 'gemini-3.1-pro-preview', label: 'gemini-3.1-pro-preview', inputPrice: '$2', outputPrice: '$12' },
+  { id: 'gemini-3-flash-preview', label: 'gemini-3-flash-preview', inputPrice: '$0.5', outputPrice: '$3' },
+  { id: 'google/gemma-4-31b-it:nitro', label: 'google/gemma-4-31b-it:nitro', inputPrice: '$0.13', outputPrice: '$0.38' },
+  { id: 'openai/gpt-oss-120b:nitro', label: 'openai/gpt-oss-120b:nitro', inputPrice: '$0.35', outputPrice: '$0.75' },
+] as const
 
 export function CoursePage() {
   const token = typeof localStorage !== 'undefined' ? localStorage.getItem('access_token') : null
@@ -32,6 +37,7 @@ export function CoursePage() {
   const [modelsOpen, setModelsOpen] = useState(false)
   const [settingsLoading, setSettingsLoading] = useState(false)
   const [settingsStatus, setSettingsStatus] = useState<string | null>(null)
+  const models = provider === 'openrouter' ? OPENROUTER_MODELS : OPENAI_MODELS
 
   useEffect(() => {
     const run = async () => {
@@ -106,22 +112,26 @@ export function CoursePage() {
               <button
                 type="button"
                 className={`provider-chip ${provider === 'openai' ? 'provider-chip--active' : ''}`}
-                onClick={() => setProvider('openai')}
+                onClick={() => {
+                  setProvider('openai')
+                  setModel(OPENAI_MODELS[0].id)
+                }}
               >
                 OpenAI
               </button>
               <button
                 type="button"
-                className="provider-chip provider-chip--disabled"
-                disabled
-                title="OpenRouter скоро будет доступен"
-                onClick={() => setProvider('openrouter')}
+                className={`provider-chip ${provider === 'openrouter' ? 'provider-chip--active' : ''}`}
+                onClick={() => {
+                  setProvider('openrouter')
+                  setModel(OPENROUTER_MODELS[0].id)
+                }}
               >
-                OpenRouter (скоро)
+                OpenRouter
               </button>
             </div>
             <div className="field" style={{ maxWidth: 420 }}>
-              <span>Модель OpenAI</span>
+              <span>Модель</span>
               <div className="model-dropdown">
                 <button
                   type="button"
@@ -129,16 +139,16 @@ export function CoursePage() {
                   onClick={() => setModelsOpen(prev => !prev)}
                 >
                   <span className="model-trigger-title">
-                    <OpenAILogo size={14} />
-                    <span>{OPENAI_MODELS.find(item => item.id === model)?.label ?? model}</span>
+                    <ModelLogo size={14} provider={provider} model={model} />
+                    <span>{models.find(item => item.id === model)?.label ?? model}</span>
                   </span>
                   <span className="model-dropdown-hint">
-                    input {OPENAI_MODELS.find(item => item.id === model)?.inputPrice} / output {OPENAI_MODELS.find(item => item.id === model)?.outputPrice}
+                    input {models.find(item => item.id === model)?.inputPrice} / output {models.find(item => item.id === model)?.outputPrice}
                   </span>
                 </button>
                 {modelsOpen && (
                   <div className="model-dropdown-panel">
-                    {OPENAI_MODELS.map((item) => (
+                    {models.map((item) => (
                       <button
                         type="button"
                         key={item.id}
@@ -149,7 +159,7 @@ export function CoursePage() {
                         }}
                       >
                         <div className="model-card-title">
-                          <OpenAILogo size={14} />
+                          <ModelLogo size={14} provider={provider} model={item.id} />
                           <span>{item.label}</span>
                         </div>
                         <div className="model-card-prices">
@@ -194,7 +204,7 @@ export function CoursePage() {
                   </span>
                 )}
                 <span className={`topic-model ${t.content_ai_model ? '' : 'topic-model--pending'}`}>
-                  {isOpenAIModel(t.content_ai_model) && <OpenAILogo size={11} />}
+                  <ModelLogo size={11} model={t.content_ai_model} />
                   <span>{t.content_ai_model ?? 'не сгенерировано'}</span>
                 </span>
               </div>

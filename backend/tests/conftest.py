@@ -71,6 +71,8 @@ def auth_headers(client: TestClient) -> Callable[..., dict[str, str]]:
         client.post("/auth/register", json={"username": username, "email": email, "password": password})
         r = client.post("/auth/login", json={"username": username, "password": password})
         token = r.json()["access_token"]
-        return {"Authorization": f"Bearer {token}"}
+        headers = {"Authorization": f"Bearer {token}"}
+        client.patch("/auth/api-keys", json={"openai_api_key": "sk-test-openai"}, headers=headers)
+        return headers
 
     return _make

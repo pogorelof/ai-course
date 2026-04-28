@@ -115,7 +115,7 @@ def test_legacy_topic_content_model_defaults_to_gpt4o_mini(client: TestClient, a
     assert intro["content_ai_model"] == "gpt-4o-mini"
 
 
-def test_course_settings_reject_openrouter(client: TestClient, auth_headers):
+def test_course_settings_accept_openrouter_models(client: TestClient, auth_headers):
     with patch("app.routers.courses.generate_course_outline", return_value=[f"A{i}" for i in range(15)]):
         created = client.post("/courses/outline", data={"title": "OpenRouter", "wishes": "w"}, headers=auth_headers())
         assert created.status_code == 200
@@ -123,10 +123,12 @@ def test_course_settings_reject_openrouter(client: TestClient, auth_headers):
 
     updated = client.patch(
         f"/courses/{course_id}/settings",
-        json={"ai_provider": "openrouter", "ai_model": "gpt-5-mini"},
+        json={"ai_provider": "openrouter", "ai_model": "deepseek-v4-flash"},
         headers=auth_headers(),
     )
-    assert updated.status_code == 400
+    assert updated.status_code == 200
+    assert updated.json()["ai_provider"] == "openrouter"
+    assert updated.json()["ai_model"] == "deepseek-v4-flash"
 
 
 def _create_course_and_topic(client: TestClient, auth_headers):
@@ -147,6 +149,7 @@ def test_generate_quiz_creates_once_and_reuses(client: TestClient, auth_headers)
             "question_text": f"Question {i + 1}",
             "options": [f"A{i}", f"B{i}", f"C{i}", f"D{i}"],
             "correct_option_index": 1,
+            "advice": f"Advice {i + 1}",
         }
         for i in range(5)
     ]
@@ -170,6 +173,7 @@ def test_submit_quiz_returns_score_and_stores_attempt(client: TestClient, auth_h
             "question_text": f"Question {i + 1}",
             "options": [f"A{i}", f"B{i}", f"C{i}", f"D{i}"],
             "correct_option_index": 0,
+            "advice": f"Advice {i + 1}",
         }
         for i in range(5)
     ]
@@ -186,19 +190,18 @@ def test_submit_quiz_returns_score_and_stores_attempt(client: TestClient, auth_h
                 "selected_option_index": 2 if index == 1 else 0,
             }
         )
-    with patch("app.routers.courses.generate_quiz_advice", return_value={1: "Review the core definition"}):
-        submitted = client.post(
-            f"/courses/topics/{topic_id}/quiz/submit",
-            json={"answers": answers},
-            headers=auth_headers(),
-        )
+    submitted = client.post(
+        f"/courses/topics/{topic_id}/quiz/submit",
+        json={"answers": answers},
+        headers=auth_headers(),
+    )
     assert submitted.status_code == 200
     body = submitted.json()
     assert body["score_percent"] == 80
     assert body["correct_answers"] == 4
     assert len(body["wrong_advices"]) == 1
     assert len(body["question_results"]) == 5
-    assert body["wrong_advices"][0]["advice"] == "Review the core definition"
+    assert body["wrong_advices"][0]["advice"] == "Advice 2"
 
     fetched_quiz = client.get(f"/courses/topics/{topic_id}/quiz", headers=auth_headers())
     assert fetched_quiz.status_code == 200

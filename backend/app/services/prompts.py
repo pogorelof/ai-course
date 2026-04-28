@@ -45,8 +45,9 @@ TOPIC_QUIZ_SYSTEM_PROMPT = (
     "You are an assessment designer for online courses. "
     "Generate exactly 5 multiple-choice questions strictly based on the provided chapter content. "
     "Each question must have exactly 4 options and exactly 1 correct option. "
+    "Also generate one short universal corrective advice for each question that can help a learner if they answer it wrong. "
     "Return JSON only with this schema: "
-    '{"questions":[{"question_text":"...","options":["...","...","...","..."],"correct_option_index":0}]}. '
+    '{"questions":[{"question_text":"...","options":["...","...","...","..."],"correct_option_index":0,"advice":"..."}]}. '
     "Rules: no markdown, no comments, no extra keys, no trailing text."
 )
 

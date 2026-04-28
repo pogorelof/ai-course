@@ -64,9 +64,6 @@ def update_user_api_keys(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> UserAPIKeysOut:
-    if payload.openrouter_api_key:
-        raise HTTPException(status_code=400, detail="OpenRouter is not available yet.")
-
     keys = db.scalar(select(UserAPIKeys).where(UserAPIKeys.user_id == current_user.id))
     if not keys:
         keys = UserAPIKeys(user_id=current_user.id)

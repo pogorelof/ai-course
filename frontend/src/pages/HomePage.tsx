@@ -4,6 +4,7 @@ import { CoursesAPI } from '../services/api'
 import type { Course } from '../types/domain'
 import { PageContainer } from '../components/PageContainer'
 import { LoadingPulse } from '../components/LoadingPulse'
+import { ModelLogo } from '../components/ModelLogo'
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist'
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
@@ -141,6 +142,10 @@ export function HomePage() {
                   <div className="course-panel-main">
                     <div className="course-main-content">
                       <span style={{ fontWeight: 600, lineHeight: 1.24 }}>{c.title}</span>
+                      <span className="course-model">
+                        <ModelLogo size={11} provider={c.ai_provider} model={c.ai_model ?? 'gpt-4o-mini'} />
+                        <span>{c.ai_model ?? 'gpt-4o-mini'}</span>
+                      </span>
                       <p className={c.wishes && c.wishes.trim().length > 0 ? 'course-wishes' : 'course-wishes course-wishes--empty'}>
                         {c.wishes && c.wishes.trim().length > 0 ? c.wishes : 'Нет пожеланий на курс'}
                       </p>

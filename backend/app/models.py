@@ -135,9 +135,24 @@ class TopicQuizQuestion(Base):
     correct_option_index: Mapped[int] = mapped_column(Integer, nullable=False)
 
     quiz: Mapped[TopicQuiz] = relationship("TopicQuiz", back_populates="questions")
+    generated_advice: Mapped[Optional["TopicQuizQuestionAdvice"]] = relationship(
+        "TopicQuizQuestionAdvice", back_populates="question", uselist=False, cascade="all, delete-orphan"
+    )
     answers: Mapped[list["TopicQuizAttemptAnswer"]] = relationship(
         "TopicQuizAttemptAnswer", back_populates="question", cascade="all, delete-orphan"
     )
+
+
+class TopicQuizQuestionAdvice(Base):
+    __tablename__ = "topic_quiz_question_advices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    question_id: Mapped[int] = mapped_column(
+        ForeignKey("topic_quiz_questions.id", ondelete="CASCADE"), nullable=False, unique=True, index=True
+    )
+    advice: Mapped[str] = mapped_column(Text, nullable=False)
+
+    question: Mapped[TopicQuizQuestion] = relationship("TopicQuizQuestion", back_populates="generated_advice")
 
 
 class TopicQuizAttempt(Base):

@@ -54,5 +54,6 @@ def test_api_keys_get_and_update(client: TestClient):
     assert updated.status_code == 200
     assert updated.json()["has_openai_key"] is True
 
-    blocked = client.patch("/auth/api-keys", json={"openrouter_api_key": "or-key"}, headers=headers)
-    assert blocked.status_code == 400
+    updated_openrouter = client.patch("/auth/api-keys", json={"openrouter_api_key": "or-key"}, headers=headers)
+    assert updated_openrouter.status_code == 200
+    assert updated_openrouter.json()["has_openrouter_key"] is True

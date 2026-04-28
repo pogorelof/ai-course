@@ -5,13 +5,7 @@ import type { GeneratedTopic, TopicQuiz, TopicQuizResult } from '../types/domain
 import { PageContainer } from '../components/PageContainer'
 import { LoadingPulse } from '../components/LoadingPulse'
 import { MarkdownRenderer } from '../components/MarkdownRenderer'
-import { OpenAILogo } from '../components/OpenAILogo'
-
-const isOpenAIModel = (model: string | null | undefined) => {
-  if (!model) return false
-  const normalized = model.toLowerCase()
-  return normalized.startsWith('gpt-') || normalized.startsWith('o1') || normalized.startsWith('o3') || normalized.startsWith('o4')
-}
+import { ModelLogo } from '../components/ModelLogo'
 
 export function TopicPage() {
   const token = typeof localStorage !== 'undefined' ? localStorage.getItem('access_token') : null
@@ -128,7 +122,7 @@ export function TopicPage() {
                 <h1 className="page-hero-title">{title ? `Курс: ${title}` : 'Глава курса'}</h1>
                 {contentModel && (
                   <div className="topic-model-inline">
-                    {isOpenAIModel(contentModel) && <OpenAILogo size={11} />}
+                    <ModelLogo size={11} model={contentModel} />
                     <span>{contentModel}</span>
                   </div>
                 )}

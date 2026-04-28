@@ -1,4 +1,5 @@
 from typing import List, Optional
+import logging
 import os
 import uuid
 import shutil
@@ -7,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, File, Form, Uploa
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from openai import OpenAIError
 
 from ..db import get_db
@@ -21,6 +23,7 @@ from ..models import (
     TopicQuizAttempt,
     TopicQuizAttemptAnswer,
     TopicQuizQuestion,
+    TopicQuizQuestionAdvice,
 )
 from ..schemas import (
     CourseCreate,
@@ -40,23 +43,24 @@ from ..schemas import (
 from ..services.ai import (
     extract_text_from_pdf,
     generate_course_outline,
-    generate_quiz_advice,
     generate_topic_content,
     generate_topic_quiz,
 )
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 PASSING_SCORE_PERCENT = 60
-ACTIVE_AI_PROVIDER = "openai"
+ACTIVE_AI_PROVIDERS = {"openai", "openrouter"}
 LEGACY_DEFAULT_CONTENT_MODEL = "gpt-4o-mini"
+LEGACY_DEFAULT_COURSE_MODEL = "gpt-4o-mini"
 
 
 def _assert_active_ai_provider(ai_provider: str) -> None:
-    if ai_provider != ACTIVE_AI_PROVIDER:
+    if ai_provider not in ACTIVE_AI_PROVIDERS:
         raise HTTPException(
             status_code=400,
-            detail="OpenRouter is not available yet. Please select OpenAI.",
+            detail=f"Unsupported AI provider: {ai_provider}",
         )
 
 
@@ -71,19 +75,21 @@ def _resolve_course_ai_settings(course: Course, db: Session) -> tuple[str, str]:
     return "openai", "gpt-5-mini"
 
 
-def _resolve_user_openai_api_key(user_id: int, db: Session) -> Optional[str]:
+def _resolve_user_api_key(user_id: int, provider: str, db: Session) -> Optional[str]:
     settings = db.scalar(select(UserAPIKeys).where(UserAPIKeys.user_id == user_id))
     if not settings:
         return None
+    if provider == "openrouter":
+        return settings.openrouter_api_key
     return settings.openai_api_key
 
 
-def _require_user_openai_api_key(user_id: int, db: Session) -> str:
-    api_key = _resolve_user_openai_api_key(user_id, db)
+def _require_user_api_key(user_id: int, provider: str, db: Session) -> str:
+    api_key = _resolve_user_api_key(user_id, provider, db)
     if not api_key or not api_key.strip():
         raise HTTPException(
             status_code=400,
-            detail="OpenAI API key is not set. Add it in the API keys popup near your profile.",
+            detail=f"{provider} API key is not set. Add it in the API keys popup near your profile.",
         )
     return api_key
 
@@ -132,7 +138,7 @@ def create_outline(
 ):
     validated_payload = CourseCreate(title=title, wishes=wishes, ai_provider=ai_provider, ai_model=ai_model)
     _assert_active_ai_provider(validated_payload.ai_provider)
-    user_openai_api_key = _require_user_openai_api_key(current_user.id, db)
+    user_api_key = _require_user_api_key(current_user.id, validated_payload.ai_provider, db)
 
     pdf_text = None
     pdf_path = None
@@ -179,10 +185,19 @@ def create_outline(
             validated_payload.title,
             validated_payload.wishes,
             model=validated_payload.ai_model,
+            provider=validated_payload.ai_provider,
             pdf_text=pdf_text,
-            api_key=user_openai_api_key,
+            api_key=user_api_key,
         )
     except OpenAIError as e:
+        logger.exception(
+            "AI outline generation failed: user_id=%s provider=%s model=%s title=%r error=%s",
+            current_user.id,
+            validated_payload.ai_provider,
+            validated_payload.ai_model,
+            validated_payload.title,
+            str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(e),
@@ -240,7 +255,7 @@ def generate_content(topic_id: int, db: Session = Depends(get_db), current_user=
     pdf_text = None
     if course.pdf_path and os.path.exists(course.pdf_path):
          pdf_text = extract_text_from_pdf(course.pdf_path)
-    api_key = _require_user_openai_api_key(current_user.id, db)
+    api_key = _require_user_api_key(current_user.id, ai_provider, db)
 
     try:
         content = generate_topic_content(
@@ -248,10 +263,20 @@ def generate_content(topic_id: int, db: Session = Depends(get_db), current_user=
             course.wishes,
             topic.title,
             model=ai_model,
+            provider=ai_provider,
             pdf_text=pdf_text,
             api_key=api_key,
         )
     except OpenAIError as e:
+        logger.exception(
+            "AI topic content generation failed: user_id=%s course_id=%s topic_id=%s provider=%s model=%s error=%s",
+            current_user.id,
+            course.id,
+            topic.id,
+            ai_provider,
+            ai_model,
+            str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(e),
@@ -355,7 +380,7 @@ def generate_topic_quiz_endpoint(topic_id: int, db: Session = Depends(get_db), c
     existing_quiz = db.scalar(select(TopicQuiz).where(TopicQuiz.topic_id == topic.id))
     if existing_quiz:
         return _serialize_quiz(existing_quiz, db, current_user.id)
-    api_key = _require_user_openai_api_key(current_user.id, db)
+    api_key = _require_user_api_key(current_user.id, ai_provider, db)
 
     try:
         generated_questions = generate_topic_quiz(
@@ -363,14 +388,32 @@ def generate_topic_quiz_endpoint(topic_id: int, db: Session = Depends(get_db), c
             topic_title=topic.title,
             topic_content=topic.content,
             model=ai_model,
+            provider=ai_provider,
             api_key=api_key,
         )
     except OpenAIError as e:
+        logger.exception(
+            "AI quiz generation failed: user_id=%s course_id=%s topic_id=%s provider=%s model=%s error=%s",
+            current_user.id,
+            course.id,
+            topic.id,
+            ai_provider,
+            ai_model,
+            str(e),
+        )
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
 
     quiz = TopicQuiz(topic_id=topic.id)
     db.add(quiz)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        # Parallel request could create quiz first.
+        db.rollback()
+        existing_quiz = db.scalar(select(TopicQuiz).where(TopicQuiz.topic_id == topic.id))
+        if existing_quiz:
+            return _serialize_quiz(existing_quiz, db, current_user.id)
+        raise HTTPException(status_code=409, detail="Quiz is being generated. Please retry.")
 
     records: list[TopicQuizQuestion] = []
     for idx, question in enumerate(generated_questions, start=1):
@@ -388,6 +431,16 @@ def generate_topic_quiz_endpoint(topic_id: int, db: Session = Depends(get_db), c
             )
         )
     db.add_all(records)
+    db.flush()
+    advice_rows: list[TopicQuizQuestionAdvice] = []
+    for idx, question_record in enumerate(records):
+        advice_rows.append(
+            TopicQuizQuestionAdvice(
+                question_id=question_record.id,
+                advice=generated_questions[idx]["advice"],
+            )
+        )
+    db.add_all(advice_rows)
     db.commit()
     db.refresh(quiz)
     return _serialize_quiz(quiz, db, current_user.id)
@@ -432,7 +485,13 @@ def submit_topic_quiz(
     if set(submitted_by_question_id.keys()) != expected_ids:
         raise HTTPException(status_code=400, detail="Answers must include every quiz question exactly once")
 
-    wrong_payload: list[dict] = []
+    question_advices = db.scalars(
+        select(TopicQuizQuestionAdvice).where(
+            TopicQuizQuestionAdvice.question_id.in_([q.id for q in questions])
+        )
+    ).all()
+    advice_by_question_id = {item.question_id: item.advice for item in question_advices}
+
     evaluation_rows: list[dict] = []
     correct_count = 0
     for q in questions:
@@ -440,16 +499,6 @@ def submit_topic_quiz(
         is_correct = selected_option_index == q.correct_option_index
         if is_correct:
             correct_count += 1
-        else:
-            wrong_payload.append(
-                {
-                    "question_index": q.position - 1,
-                    "question_text": q.question_text,
-                    "options": [q.option_a, q.option_b, q.option_c, q.option_d],
-                    "selected_option_index": selected_option_index,
-                    "correct_option_index": q.correct_option_index,
-                }
-            )
         evaluation_rows.append(
             {
                 "question": q,
@@ -459,19 +508,6 @@ def submit_topic_quiz(
         )
 
     score_percent = int(round((correct_count / len(questions)) * 100))
-    advices_by_index: dict[int, str] = {}
-    if wrong_payload:
-        api_key = _require_user_openai_api_key(current_user.id, db)
-        try:
-            advices_by_index = generate_quiz_advice(
-                topic_content=topic.content or "",
-                wrong_answers_payload=wrong_payload,
-                model=ai_model,
-                api_key=api_key,
-            )
-        except OpenAIError as e:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(e))
-
     attempt = TopicQuizAttempt(quiz_id=quiz.id, user_id=current_user.id, score_percent=score_percent)
     db.add(attempt)
     db.flush()
@@ -483,8 +519,8 @@ def submit_topic_quiz(
         question: TopicQuizQuestion = row["question"]
         advice = None
         if not row["is_correct"]:
-            advice = advices_by_index.get(
-                question.position - 1,
+            advice = advice_by_question_id.get(
+                question.id,
                 "Повтори раздел главы, связанный с этим вопросом, и попробуй выделить ключевое определение своими словами.",
             )
             wrong_advices.append(
@@ -531,7 +567,12 @@ def list_my_courses(db: Session = Depends(get_db), current_user=Depends(get_curr
     courses = db.scalars(select(Course).where(Course.owner_id == current_user.id)).all()
     result: list[CourseOut] = []
     for course in courses:
-        ai_provider, ai_model = _resolve_course_ai_settings(course, db)
+        ai_settings = _get_course_ai_settings(course, db)
+        if ai_settings:
+            ai_provider, ai_model = ai_settings.ai_provider, ai_settings.ai_model
+        else:
+            # Legacy courses (created before per-course AI settings) were generated with gpt-4o-mini.
+            ai_provider, ai_model = "openai", LEGACY_DEFAULT_COURSE_MODEL
         has_book = bool(course.pdf_path and os.path.exists(course.pdf_path))
         book_name = os.path.basename(course.pdf_path) if has_book and course.pdf_path else None
         book_url = f"/courses/{course.id}/book" if has_book else None

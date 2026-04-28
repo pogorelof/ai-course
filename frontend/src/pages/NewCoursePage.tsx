@@ -4,7 +4,7 @@ import { CoursesAPI } from '../services/api'
 import type { Topic } from '../types/domain'
 import { PageContainer } from '../components/PageContainer'
 import { LoadingPulse } from '../components/LoadingPulse'
-import { OpenAILogo } from '../components/OpenAILogo'
+import { ModelLogo } from '../components/ModelLogo'
 
 const OPENAI_MODELS = [
   { id: 'gpt-5.5', label: 'gpt-5.5', inputPrice: '$5', outputPrice: '$30' },
@@ -13,6 +13,17 @@ const OPENAI_MODELS = [
   { id: 'gpt-5.4-nano', label: 'gpt-5.4-nano', inputPrice: '$0.2', outputPrice: '$1.25' },
   { id: 'gpt-5-mini', label: 'gpt-5-mini', inputPrice: '$0.25', outputPrice: '$2' },
   { id: 'gpt-5-nano', label: 'gpt-5-nano', inputPrice: '$0.05', outputPrice: '$0.4' },
+] as const
+const OPENROUTER_MODELS = [
+  { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash', inputPrice: '$0.14', outputPrice: '$0.28' },
+  { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro', inputPrice: '$1.74', outputPrice: '$3.48' },
+  { id: 'claude-opus-4.7', label: 'claude-opus-4.7', inputPrice: '$5', outputPrice: '$25' },
+  { id: 'claude-sonnet-4.6', label: 'claude-sonnet-4.6', inputPrice: '$3', outputPrice: '$15' },
+  { id: 'claude-haiku-4.5', label: 'claude-haiku-4.5', inputPrice: '$1', outputPrice: '$5' },
+  { id: 'gemini-3.1-pro-preview', label: 'gemini-3.1-pro-preview', inputPrice: '$2', outputPrice: '$12' },
+  { id: 'gemini-3-flash-preview', label: 'gemini-3-flash-preview', inputPrice: '$0.5', outputPrice: '$3' },
+  { id: 'google/gemma-4-31b-it:nitro', label: 'google/gemma-4-31b-it:nitro', inputPrice: '$0.13', outputPrice: '$0.38' },
+  { id: 'openai/gpt-oss-120b:nitro', label: 'openai/gpt-oss-120b:nitro', inputPrice: '$0.35', outputPrice: '$0.75' },
 ] as const
 
 export function NewCoursePage() {
@@ -28,6 +39,7 @@ export function NewCoursePage() {
   const [error, setError] = useState<string | null>(null)
   const [topics, setTopics] = useState<Topic[]>([])
   const [createdCourseId, setCreatedCourseId] = useState<number | null>(null)
+  const models = aiProvider === 'openrouter' ? OPENROUTER_MODELS : OPENAI_MODELS
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -45,7 +57,7 @@ export function NewCoursePage() {
       setCreatedCourseId(data.course_id)
       setTopics(data.topics)
     } catch (e) {
-      setError('Ошибка генерации. Проверьте API ключ на сервере.')
+      setError('Ошибка генерации. Проверьте API ключи в меню "Ключи API".')
     } finally {
       setLoading(false)
     }
@@ -76,23 +88,27 @@ export function NewCoursePage() {
                   <button
                     type="button"
                     className={`provider-chip ${aiProvider === 'openai' ? 'provider-chip--active' : ''}`}
-                    onClick={() => setAiProvider('openai')}
+                    onClick={() => {
+                      setAiProvider('openai')
+                      setAiModel(OPENAI_MODELS[0].id)
+                    }}
                   >
                     OpenAI
                   </button>
                   <button
                     type="button"
-                    className="provider-chip provider-chip--disabled"
-                    disabled
-                    title="OpenRouter скоро будет доступен"
-                    onClick={() => setAiProvider('openrouter')}
+                    className={`provider-chip ${aiProvider === 'openrouter' ? 'provider-chip--active' : ''}`}
+                    onClick={() => {
+                      setAiProvider('openrouter')
+                      setAiModel(OPENROUTER_MODELS[0].id)
+                    }}
                   >
-                    OpenRouter (скоро)
+                    OpenRouter
                   </button>
                 </div>
               </div>
               <div className="field">
-                <span>Модель OpenAI</span>
+                <span>Модель</span>
                 <div className="model-dropdown">
                   <button
                     type="button"
@@ -100,16 +116,16 @@ export function NewCoursePage() {
                     onClick={() => setModelsOpen(prev => !prev)}
                   >
                     <span className="model-trigger-title">
-                      <OpenAILogo size={14} />
-                      <span>{OPENAI_MODELS.find(item => item.id === aiModel)?.label ?? aiModel}</span>
+                      <ModelLogo size={14} provider={aiProvider} model={aiModel} />
+                      <span>{models.find(item => item.id === aiModel)?.label ?? aiModel}</span>
                     </span>
                     <span className="model-dropdown-hint">
-                      input {OPENAI_MODELS.find(item => item.id === aiModel)?.inputPrice} / output {OPENAI_MODELS.find(item => item.id === aiModel)?.outputPrice}
+                      input {models.find(item => item.id === aiModel)?.inputPrice} / output {models.find(item => item.id === aiModel)?.outputPrice}
                     </span>
                   </button>
                   {modelsOpen && (
                     <div className="model-dropdown-panel">
-                      {OPENAI_MODELS.map((item) => (
+                      {models.map((item) => (
                         <button
                           type="button"
                           key={item.id}
@@ -120,7 +136,7 @@ export function NewCoursePage() {
                           }}
                         >
                           <div className="model-card-title">
-                            <OpenAILogo size={14} />
+                            <ModelLogo size={14} provider={aiProvider} model={item.id} />
                             <span>{item.label}</span>
                           </div>
                           <div className="model-card-prices">

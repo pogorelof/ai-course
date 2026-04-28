@@ -6,7 +6,9 @@ import { AuthAPI } from '../services/api'
 export function Header({ auth, onLogout }: { auth: AuthState; onLogout: () => void }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [openaiKey, setOpenaiKey] = useState('')
+  const [openrouterKey, setOpenrouterKey] = useState('')
   const [hasOpenAIKey, setHasOpenAIKey] = useState(false)
+  const [hasOpenRouterKey, setHasOpenRouterKey] = useState(false)
   const [loadingKeys, setLoadingKeys] = useState(false)
   const [savingKeys, setSavingKeys] = useState(false)
   const [keyStatus, setKeyStatus] = useState<string | null>(null)
@@ -29,9 +31,11 @@ export function Header({ auth, onLogout }: { auth: AuthState; onLogout: () => vo
     setLoadingKeys(true)
     setKeyStatus(null)
     setOpenaiKey('')
+    setOpenrouterKey('')
     try {
       const keys = await AuthAPI.apiKeys()
       setHasOpenAIKey(Boolean(keys.has_openai_key))
+      setHasOpenRouterKey(Boolean(keys.has_openrouter_key))
     } catch {
       setKeyStatus('Не удалось загрузить статус ключей')
     } finally {
@@ -40,17 +44,23 @@ export function Header({ auth, onLogout }: { auth: AuthState; onLogout: () => vo
   }
 
   const saveApiKeys = async () => {
-    const trimmed = openaiKey.trim()
-    if (!trimmed) {
-      setKeyStatus('Введите OpenAI API key')
+    const trimmedOpenAI = openaiKey.trim()
+    const trimmedOpenRouter = openrouterKey.trim()
+    if (!trimmedOpenAI && !trimmedOpenRouter) {
+      setKeyStatus('Введите хотя бы один ключ')
       return
     }
     setSavingKeys(true)
     setKeyStatus(null)
     try {
-      const updated = await AuthAPI.updateApiKeys({ openai_api_key: trimmed })
+      const updated = await AuthAPI.updateApiKeys({
+        openai_api_key: trimmedOpenAI || undefined,
+        openrouter_api_key: trimmedOpenRouter || undefined,
+      })
       setHasOpenAIKey(Boolean(updated.has_openai_key))
+      setHasOpenRouterKey(Boolean(updated.has_openrouter_key))
       setOpenaiKey('')
+      setOpenrouterKey('')
       setKeyStatus('Ключ сохранен')
     } catch {
       setKeyStatus('Не удалось сохранить ключ')
@@ -117,15 +127,21 @@ export function Header({ auth, onLogout }: { auth: AuthState; onLogout: () => vo
                   />
                 </div>
                 <div className="field">
-                  <span style={{ color: 'var(--color-text-tertiary)' }}>OpenRouter API key (скоро)</span>
+                  <span>OpenRouter API key</span>
                   <input
+                    value={openrouterKey}
+                    onChange={(e) => setOpenrouterKey(e.target.value)}
                     className="input"
                     type="password"
-                    placeholder="Недоступно"
-                    disabled
+                    placeholder={hasOpenRouterKey ? 'Ключ уже сохранен, введите новый' : 'or-...'}
+                    autoComplete="off"
+                    disabled={loadingKeys || savingKeys}
                   />
                 </div>
                 {keyStatus && <p className="status-muted">{keyStatus}</p>}
+                <p className="status-muted" style={{ fontSize: 12 }}>
+                  OpenAI: {hasOpenAIKey ? 'ключ сохранен' : 'ключ не задан'}; OpenRouter: {hasOpenRouterKey ? 'ключ сохранен' : 'ключ не задан'}
+                </p>
                 <button onClick={saveApiKeys} className="btn btn-primary" disabled={loadingKeys || savingKeys}>
                   {savingKeys ? 'Сохраняем...' : 'Сохранить'}
                 </button>
