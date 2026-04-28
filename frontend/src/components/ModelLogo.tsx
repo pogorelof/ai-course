@@ -28,6 +28,10 @@ const isGemmaModel = (model: string | null | undefined) => {
   return normalizeModelBase(model).startsWith('gemma-')
 }
 
+const isLlamaModel = (model: string | null | undefined) => {
+  return normalizeModelBase(model).startsWith('llama-')
+}
+
 export function ModelLogo({ size = 14, model, provider }: { size?: number; model?: string | null; provider?: SupportedProvider }) {
   let src: string | null = null
   let alt = ''
@@ -41,6 +45,9 @@ export function ModelLogo({ size = 14, model, provider }: { size?: number; model
   } else if (isGeminiModel(model) || isGemmaModel(model)) {
     src = '/gemini.svg'
     alt = isGeminiModel(model) ? 'Gemini' : 'Gemma'
+  } else if (isLlamaModel(model)) {
+    src = '/meta.svg'
+    alt = 'Meta Llama'
   } else if (provider === 'openai' || isOpenAIModel(model)) {
     src = '/openai.svg'
     alt = 'OpenAI'

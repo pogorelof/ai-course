@@ -1,9 +1,12 @@
+export type ContentFormat = 'text' | 'interactive'
+
 export type Course = {
   id: number
   title: string
   wishes?: string | null
   ai_provider?: 'openai' | 'openrouter'
   ai_model?: string | null
+  content_format?: ContentFormat
   has_book?: boolean
   book_name?: string | null
   book_url?: string | null
@@ -12,6 +15,7 @@ export type Course = {
 export type CourseSettings = {
   ai_provider: 'openai' | 'openrouter'
   ai_model: string
+  content_format: ContentFormat
 }
 
 export type Topic = {
@@ -30,6 +34,16 @@ export type GeneratedTopic = {
   topic_id: number
   content: string
   content_ai_model: string
+}
+
+export type TopicMeta = {
+  topic_id: number
+  course_id: number
+  course_title: string
+  topic_title: string
+  content_ai_model?: string | null
+  has_text_content: boolean
+  has_html_content: boolean
 }
 
 export type TopicHtmlContent = {

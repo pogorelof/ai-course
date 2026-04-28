@@ -6,6 +6,8 @@ import { TopicPage } from './TopicPage'
 
 const { mockCoursesApi } = vi.hoisted(() => ({
   mockCoursesApi: {
+    topicMeta: vi.fn(),
+    courseSettings: vi.fn(),
     generateTopic: vi.fn(),
     topicQuiz: vi.fn(),
     generateTopicQuiz: vi.fn(),
@@ -45,10 +47,26 @@ const baseQuiz = {
   progress: { has_attempts: false, last_score_percent: null, attempts_count: 0 },
 }
 
+const baseTopicMeta = {
+  topic_id: 100,
+  course_id: 10,
+  course_title: 'Demo',
+  topic_title: 'Topic 1',
+  content_ai_model: 'gpt-5-mini',
+  has_text_content: false,
+  has_html_content: false,
+}
+
 describe('TopicPage quiz flow', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     storage.clear()
+    mockCoursesApi.topicMeta.mockResolvedValue(baseTopicMeta)
+    mockCoursesApi.courseSettings.mockResolvedValue({
+      ai_provider: 'openai',
+      ai_model: 'gpt-5-mini',
+      content_format: 'text',
+    })
     mockCoursesApi.topicHtml.mockRejectedValue(new Error('not-found'))
     mockCoursesApi.generateTopicHtml.mockResolvedValue({
       topic_id: 100,
@@ -131,15 +149,15 @@ describe('TopicPage interactive lesson', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     storage.clear()
-    mockCoursesApi.generateTopic.mockResolvedValue({
-      course_title: 'Demo',
-      course_id: 10,
-      topic_id: 100,
-      content: 'Markdown body of the lesson',
-      content_ai_model: 'gpt-5-mini',
+    mockCoursesApi.topicMeta.mockResolvedValue({
+      ...baseTopicMeta,
+      has_text_content: false,
     })
-    mockCoursesApi.topicQuiz.mockResolvedValue(baseQuiz)
-    mockCoursesApi.generateTopicQuiz.mockResolvedValue(baseQuiz)
+    mockCoursesApi.courseSettings.mockResolvedValue({
+      ai_provider: 'openai',
+      ai_model: 'gpt-5-mini',
+      content_format: 'interactive',
+    })
   })
 
   it('renders existing interactive html and hides markdown content', async () => {
@@ -173,7 +191,7 @@ describe('TopicPage interactive lesson', () => {
     )
 
     await screen.findByText('Интерактивная глава готова')
-    expect(screen.queryByText('Markdown body of the lesson')).not.toBeInTheDocument()
+    expect(mockCoursesApi.generateTopic).not.toHaveBeenCalled()
 
     const iframe = document.querySelector('iframe[title="Глава: Demo"]') as HTMLIFrameElement | null
     expect(iframe).not.toBeNull()
@@ -205,7 +223,7 @@ describe('TopicPage interactive lesson', () => {
     )
 
     const triggerButton = await screen.findByRole('button', { name: 'Сгенерировать интерактивную главу' })
-    expect(screen.getByText('Markdown body of the lesson')).toBeInTheDocument()
+    expect(mockCoursesApi.generateTopic).not.toHaveBeenCalled()
 
     const user = userEvent.setup()
     await user.click(triggerButton)
@@ -214,8 +232,5 @@ describe('TopicPage interactive lesson', () => {
       expect(mockCoursesApi.generateTopicHtml).toHaveBeenCalledWith('100')
     })
     await screen.findByText('Интерактивная глава готова')
-    await waitFor(() => {
-      expect(screen.queryByText('Markdown body of the lesson')).not.toBeInTheDocument()
-    })
   })
 })

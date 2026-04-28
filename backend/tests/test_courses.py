@@ -97,14 +97,16 @@ def test_course_settings_get_and_update(client: TestClient, auth_headers):
     assert current.status_code == 200
     assert current.json()["ai_provider"] == "openai"
     assert current.json()["ai_model"] == "gpt-5-mini"
+    assert current.json()["content_format"] == "text"
 
     updated = client.patch(
         f"/courses/{course_id}/settings",
-        json={"ai_provider": "openai", "ai_model": "gpt-5.4-mini"},
+        json={"ai_provider": "openai", "ai_model": "gpt-5.4-mini", "content_format": "interactive"},
         headers=auth_headers(),
     )
     assert updated.status_code == 200
     assert updated.json()["ai_model"] == "gpt-5.4-mini"
+    assert updated.json()["content_format"] == "interactive"
 
 
 def test_legacy_topic_content_model_defaults_to_gpt4o_mini(client: TestClient, auth_headers, db_session):
@@ -139,12 +141,17 @@ def test_course_settings_accept_openrouter_models(client: TestClient, auth_heade
 
     updated = client.patch(
         f"/courses/{course_id}/settings",
-        json={"ai_provider": "openrouter", "ai_model": "deepseek-v4-flash"},
+        json={
+            "ai_provider": "openrouter",
+            "ai_model": "meta-llama/llama-4-maverick:nitro",
+            "content_format": "text",
+        },
         headers=auth_headers(),
     )
     assert updated.status_code == 200
     assert updated.json()["ai_provider"] == "openrouter"
-    assert updated.json()["ai_model"] == "deepseek-v4-flash"
+    assert updated.json()["ai_model"] == "meta-llama/llama-4-maverick:nitro"
+    assert updated.json()["content_format"] == "text"
 
 
 def _create_course_and_topic(client: TestClient, auth_headers):
@@ -163,6 +170,38 @@ def _create_course_topic_without_content(client: TestClient, auth_headers):
         create_course = client.post("/courses/outline", data={"title": "HTML Course", "wishes": "w"}, headers=auth_headers())
         assert create_course.status_code == 200
         return create_course.json()["course_id"], create_course.json()["topics"][0]["id"]
+
+
+def test_outline_accepts_interactive_content_format(client: TestClient, auth_headers):
+    with patch("app.routers.courses.generate_course_outline", return_value=[f"T{i}" for i in range(15)]):
+        created = client.post(
+            "/courses/outline",
+            data={
+                "title": "Interactive only",
+                "wishes": "w",
+                "content_format": "interactive",
+            },
+            headers=auth_headers(),
+        )
+    assert created.status_code == 200
+    course_id = created.json()["course_id"]
+
+    settings = client.get(f"/courses/{course_id}/settings", headers=auth_headers())
+    assert settings.status_code == 200
+    assert settings.json()["content_format"] == "interactive"
+
+
+def test_topic_meta_returns_course_topic_and_format_flags(client: TestClient, auth_headers):
+    _, topic_id = _create_course_topic_without_content(client, auth_headers)
+    meta = client.get(f"/courses/topics/{topic_id}/meta", headers=auth_headers())
+    assert meta.status_code == 200
+    body = meta.json()
+    assert body["topic_id"] == topic_id
+    assert isinstance(body["course_id"], int)
+    assert body["course_title"]
+    assert body["topic_title"]
+    assert body["has_text_content"] is False
+    assert body["has_html_content"] is False
 
 
 def test_generate_quiz_creates_once_and_reuses(client: TestClient, auth_headers):

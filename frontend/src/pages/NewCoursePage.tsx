@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { CoursesAPI } from '../services/api'
-import type { Topic } from '../types/domain'
+import type { ContentFormat, Topic } from '../types/domain'
 import { PageContainer } from '../components/PageContainer'
 import { LoadingPulse } from '../components/LoadingPulse'
 import { ModelLogo } from '../components/ModelLogo'
@@ -23,6 +23,13 @@ const OPENROUTER_MODELS = [
   { id: 'claude-haiku-4.5', label: 'claude-haiku-4.5', inputPrice: '$1', outputPrice: '$5' },
   { id: 'gemini-3.1-pro-preview', label: 'gemini-3.1-pro-preview', inputPrice: '$2', outputPrice: '$12' },
   { id: 'gemini-3-flash-preview', label: 'gemini-3-flash-preview', inputPrice: '$0.5', outputPrice: '$3' },
+  { id: 'gpt-5.5', label: 'gpt-5.5', inputPrice: '$5', outputPrice: '$30' },
+  { id: 'gpt-5.4', label: 'gpt-5.4', inputPrice: '$2.5', outputPrice: '$15' },
+  { id: 'gpt-5.4-mini', label: 'gpt-5.4-mini', inputPrice: '$0.75', outputPrice: '$4.5' },
+  { id: 'gpt-5.4-nano', label: 'gpt-5.4-nano', inputPrice: '$0.2', outputPrice: '$1.25' },
+  { id: 'gpt-5-mini', label: 'gpt-5-mini', inputPrice: '$0.25', outputPrice: '$2' },
+  { id: 'gpt-5-nano', label: 'gpt-5-nano', inputPrice: '$0.05', outputPrice: '$0.4' },
+  { id: 'meta-llama/llama-4-maverick', label: 'meta-llama/llama-4-maverick', inputPrice: '$0.15', outputPrice: '$0.60' },
   { id: 'google/gemma-4-31b-it', label: 'google/gemma-4-31b-it', inputPrice: '$0.13', outputPrice: '$0.38' },
   { id: 'openai/gpt-oss-120b', label: 'openai/gpt-oss-120b', inputPrice: '$0.35', outputPrice: '$0.75' },
 ] as const
@@ -38,6 +45,7 @@ export function NewCoursePage() {
   const [wishes, setWishes] = useState('')
   const [aiProvider, setAiProvider] = useState<'openai' | 'openrouter'>('openai')
   const [aiModel, setAiModel] = useState<string>('gpt-5-mini')
+  const [contentFormat, setContentFormat] = useState<ContentFormat>('text')
   const [modelsOpen, setModelsOpen] = useState(false)
   const [file, setFile] = useState<File | undefined>(undefined)
   const [loading, setLoading] = useState(false)
@@ -59,6 +67,7 @@ export function NewCoursePage() {
         wishes,
         ai_provider: aiProvider,
         ai_model: aiModel,
+        content_format: contentFormat,
         file,
       })
       setCreatedCourseId(data.course_id)
@@ -112,6 +121,28 @@ export function NewCoursePage() {
                   >
                     OpenRouter
                   </button>
+                </div>
+              </div>
+              <div className="field">
+                <span>Формат главы</span>
+                <div className="provider-toggle">
+                  <button
+                    type="button"
+                    className={`provider-chip ${contentFormat === 'text' ? 'provider-chip--active' : ''}`}
+                    onClick={() => setContentFormat('text')}
+                  >
+                    Текстовая
+                  </button>
+                  <button
+                    type="button"
+                    className={`provider-chip ${contentFormat === 'interactive' ? 'provider-chip--active' : ''}`}
+                    onClick={() => setContentFormat('interactive')}
+                  >
+                    Интерактивная
+                  </button>
+                </div>
+                <div className="price-note">
+                  Текстовая: сначала генерируется markdown; интерактивная: сразу HTML-глава без генерации markdown.
                 </div>
               </div>
               <div className="field">

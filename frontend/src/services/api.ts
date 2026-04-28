@@ -78,6 +78,16 @@ export type TopicHtmlContentDto = {
   generated_at: string
 }
 
+export type TopicMetaDto = {
+  topic_id: number
+  course_id: number
+  course_title: string
+  topic_title: string
+  content_ai_model?: string | null
+  has_text_content: boolean
+  has_html_content: boolean
+}
+
 export const CoursesAPI = {
   async myCourses(): Promise<Array<{
     id: number
@@ -85,18 +95,20 @@ export const CoursesAPI = {
     wishes?: string | null
     ai_provider?: 'openai' | 'openrouter'
     ai_model?: string | null
+    content_format?: 'text' | 'interactive'
     has_book?: boolean
     book_name?: string | null
     book_url?: string | null
   }>> {
     return apiFetch('/courses/mine', { auth: true })
   },
-  async outline(payload: { title: string; wishes: string; ai_provider: 'openai' | 'openrouter'; ai_model: string; file?: File }): Promise<{ course_id: number; topics: Array<{ id: number; title: string }> }> {
+  async outline(payload: { title: string; wishes: string; ai_provider: 'openai' | 'openrouter'; ai_model: string; content_format: 'text' | 'interactive'; file?: File }): Promise<{ course_id: number; topics: Array<{ id: number; title: string }> }> {
     const formData = new FormData()
     formData.append('title', payload.title)
     formData.append('wishes', payload.wishes)
     formData.append('ai_provider', payload.ai_provider)
     formData.append('ai_model', payload.ai_model)
+    formData.append('content_format', payload.content_format)
     if (payload.file) {
       formData.append('file', payload.file)
     }
@@ -121,6 +133,9 @@ export const CoursesAPI = {
     content_ai_model: string
   }> {
     return apiFetch(`/courses/topics/${topicId}/generate`, { method: 'POST', auth: true })
+  },
+  async topicMeta(topicId: number | string): Promise<TopicMetaDto> {
+    return apiFetch(`/courses/topics/${topicId}/meta`, { auth: true })
   },
   async topicQuiz(topicId: number | string): Promise<{
     topic_id: number
@@ -211,13 +226,13 @@ export const CoursesAPI = {
   async deleteCourse(courseId: number | string): Promise<void> {
     await apiFetch(`/courses/${courseId}`, { method: 'DELETE', auth: true })
   },
-  async courseSettings(courseId: number | string): Promise<{ ai_provider: 'openai' | 'openrouter'; ai_model: string }> {
+  async courseSettings(courseId: number | string): Promise<{ ai_provider: 'openai' | 'openrouter'; ai_model: string; content_format: 'text' | 'interactive' }> {
     return apiFetch(`/courses/${courseId}/settings`, { auth: true })
   },
   async updateCourseSettings(
     courseId: number | string,
-    payload: { ai_provider: 'openai' | 'openrouter'; ai_model: string }
-  ): Promise<{ ai_provider: 'openai' | 'openrouter'; ai_model: string }> {
+    payload: { ai_provider: 'openai' | 'openrouter'; ai_model: string; content_format: 'text' | 'interactive' }
+  ): Promise<{ ai_provider: 'openai' | 'openrouter'; ai_model: string; content_format: 'text' | 'interactive' }> {
     return apiFetch(`/courses/${courseId}/settings`, { method: 'PATCH', auth: true, body: payload })
   },
   async fetchCourseBookBlob(courseId: number | string): Promise<Blob> {

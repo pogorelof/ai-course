@@ -19,10 +19,18 @@ SUPPORTED_OPENROUTER_BASE_MODELS = (
     "claude-haiku-4.5",
     "gemini-3.1-pro-preview",
     "gemini-3-flash-preview",
+    "gpt-5.5",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.4-nano",
+    "gpt-5-mini",
+    "gpt-5-nano",
+    "meta-llama/llama-4-maverick",
     "google/gemma-4-31b-it",
     "openai/gpt-oss-120b",
 )
 NITRO_SUFFIX = ":nitro"
+SUPPORTED_CONTENT_FORMATS = ("text", "interactive")
 
 
 def _is_supported_openrouter_model(model: str) -> bool:
@@ -72,6 +80,7 @@ class CourseCreate(BaseModel):
     wishes: str
     ai_provider: str = "openai"
     ai_model: str = "gpt-5-mini"
+    content_format: str = "text"
 
     @field_validator("ai_provider")
     @classmethod
@@ -91,6 +100,14 @@ class CourseCreate(BaseModel):
     def trim_text_fields(cls, v: str) -> str:
         return v.strip()
 
+    @field_validator("content_format")
+    @classmethod
+    def validate_content_format(cls, v: str) -> str:
+        normalized = v.strip().lower()
+        if normalized not in SUPPORTED_CONTENT_FORMATS:
+            raise ValueError("Unsupported content_format")
+        return normalized
+
     @model_validator(mode="after")
     def validate_provider_model(self):
         if self.ai_provider == "openai" and self.ai_model not in SUPPORTED_OPENAI_MODELS:
@@ -105,6 +122,7 @@ class CourseOut(BaseModel):
     wishes: Optional[str] = None
     ai_provider: str = "openai"
     ai_model: str = "gpt-5-mini"
+    content_format: str = "text"
     has_book: bool = False
     book_name: Optional[str] = None
     book_url: Optional[str] = None
@@ -138,6 +156,16 @@ class TopicContentResponse(BaseModel):
     topic_id: int
     content: str
     content_ai_model: str
+
+
+class TopicMetaOut(BaseModel):
+    topic_id: int
+    course_id: int
+    course_title: str
+    topic_title: str
+    content_ai_model: Optional[str] = None
+    has_text_content: bool = False
+    has_html_content: bool = False
 
 
 class TopicHtmlContentOut(BaseModel):
@@ -197,6 +225,7 @@ class TopicQuizOut(BaseModel):
 class CourseSettingsUpdateInput(BaseModel):
     ai_provider: str
     ai_model: str
+    content_format: str = "text"
 
     @field_validator("ai_provider")
     @classmethod
@@ -211,6 +240,14 @@ class CourseSettingsUpdateInput(BaseModel):
     def validate_ai_model(cls, v: str) -> str:
         return v.strip()
 
+    @field_validator("content_format")
+    @classmethod
+    def validate_content_format(cls, v: str) -> str:
+        normalized = v.strip().lower()
+        if normalized not in SUPPORTED_CONTENT_FORMATS:
+            raise ValueError("Unsupported content_format")
+        return normalized
+
     @model_validator(mode="after")
     def validate_provider_model(self):
         if self.ai_provider == "openai" and self.ai_model not in SUPPORTED_OPENAI_MODELS:
@@ -222,6 +259,7 @@ class CourseSettingsUpdateInput(BaseModel):
 class CourseSettingsOut(BaseModel):
     ai_provider: str
     ai_model: str
+    content_format: str = "text"
 
 
 class UserAPIKeysUpdateInput(BaseModel):

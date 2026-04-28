@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional
 import logging
 import os
@@ -16,6 +17,7 @@ from ..core.security import get_current_user
 from ..models import (
     Course,
     CourseAISettings,
+    CourseContentSettings,
     UserAPIKeys,
     CourseTopic,
     TopicContentGeneration,
@@ -36,6 +38,7 @@ from ..schemas import (
     QuizSubmitInput,
     QuizWrongAdviceOut,
     TopicContentResponse,
+    TopicMetaOut,
     TopicHtmlContentOut,
     TopicOut,
     TopicQuizOut,
@@ -78,6 +81,17 @@ def _resolve_course_ai_settings(course: Course, db: Session) -> tuple[str, str]:
     return "openai", "gpt-5-mini"
 
 
+def _get_course_content_settings(course: Course, db: Session) -> Optional[CourseContentSettings]:
+    return db.scalar(select(CourseContentSettings).where(CourseContentSettings.course_id == course.id))
+
+
+def _resolve_course_content_format(course: Course, db: Session) -> str:
+    settings = _get_course_content_settings(course, db)
+    if settings:
+        return settings.content_format
+    return "text"
+
+
 def _resolve_user_api_key(user_id: int, provider: str, db: Session) -> Optional[str]:
     settings = db.scalar(select(UserAPIKeys).where(UserAPIKeys.user_id == user_id))
     if not settings:
@@ -106,6 +120,18 @@ def _upsert_course_ai_settings(course: Course, db: Session, ai_provider: str, ai
         return settings
     settings.ai_provider = ai_provider
     settings.ai_model = ai_model
+    db.add(settings)
+    return settings
+
+
+def _upsert_course_content_settings(course: Course, db: Session, content_format: str) -> CourseContentSettings:
+    settings = db.scalar(select(CourseContentSettings).where(CourseContentSettings.course_id == course.id))
+    if not settings:
+        settings = CourseContentSettings(course_id=course.id, content_format=content_format)
+        db.add(settings)
+        db.flush()
+        return settings
+    settings.content_format = content_format
     db.add(settings)
     return settings
 
@@ -142,7 +168,6 @@ def _upsert_topic_html_content(topic_id: int, html: str, ai_provider: str, ai_mo
         record.html = html
         record.ai_provider = ai_provider
         record.ai_model = ai_model
-        from datetime import datetime
         record.generated_at = datetime.utcnow()
     db.add(record)
     return record
@@ -154,11 +179,18 @@ def create_outline(
     wishes: str = Form(...),
     ai_provider: str = Form("openai"),
     ai_model: str = Form("gpt-5-mini"),
+    content_format: str = Form("text"),
     file: UploadFile = File(None),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-    validated_payload = CourseCreate(title=title, wishes=wishes, ai_provider=ai_provider, ai_model=ai_model)
+    validated_payload = CourseCreate(
+        title=title,
+        wishes=wishes,
+        ai_provider=ai_provider,
+        ai_model=ai_model,
+        content_format=content_format,
+    )
     _assert_active_ai_provider(validated_payload.ai_provider)
     user_api_key = _require_user_api_key(current_user.id, validated_payload.ai_provider, db)
 
@@ -236,6 +268,7 @@ def create_outline(
     db.add(course)
     db.flush()
     _upsert_course_ai_settings(course, db, validated_payload.ai_provider, validated_payload.ai_model)
+    _upsert_course_content_settings(course, db, validated_payload.content_format)
 
     topics: list[CourseTopic] = []
     for t in titles:
@@ -584,6 +617,21 @@ def submit_topic_quiz(
     )
 
 
+@router.get("/topics/{topic_id}/meta", response_model=TopicMetaOut)
+def get_topic_meta(topic_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    topic, course = _get_topic_and_course_or_404(topic_id, db, current_user.id)
+    has_html = db.scalar(select(TopicHtmlContent.id).where(TopicHtmlContent.topic_id == topic.id)) is not None
+    return TopicMetaOut(
+        topic_id=topic.id,
+        course_id=course.id,
+        course_title=course.title,
+        topic_title=topic.title,
+        content_ai_model=_resolve_topic_content_model(topic, db),
+        has_text_content=bool(topic.content and topic.content.strip()),
+        has_html_content=has_html,
+    )
+
+
 @router.get("/topics/{topic_id}/content/html", response_model=TopicHtmlContentOut)
 def get_topic_html(topic_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     topic, course = _get_topic_and_course_or_404(topic_id, db, current_user.id)
@@ -662,6 +710,7 @@ def list_my_courses(db: Session = Depends(get_db), current_user=Depends(get_curr
     result: list[CourseOut] = []
     for course in courses:
         ai_settings = _get_course_ai_settings(course, db)
+        content_format = _resolve_course_content_format(course, db)
         if ai_settings:
             ai_provider, ai_model = ai_settings.ai_provider, ai_settings.ai_model
         else:
@@ -678,6 +727,7 @@ def list_my_courses(db: Session = Depends(get_db), current_user=Depends(get_curr
                 wishes=wishes,
                 ai_provider=ai_provider,
                 ai_model=ai_model,
+                content_format=content_format,
                 has_book=has_book,
                 book_name=book_name,
                 book_url=book_url,
@@ -692,7 +742,8 @@ def get_course_settings(course_id: int, db: Session = Depends(get_db), current_u
     if not course or course.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Forbidden")
     ai_provider, ai_model = _resolve_course_ai_settings(course, db)
-    return CourseSettingsOut(ai_provider=ai_provider, ai_model=ai_model)
+    content_format = _resolve_course_content_format(course, db)
+    return CourseSettingsOut(ai_provider=ai_provider, ai_model=ai_model, content_format=content_format)
 
 
 @router.patch("/{course_id}/settings", response_model=CourseSettingsOut)
@@ -707,9 +758,15 @@ def update_course_settings(
         raise HTTPException(status_code=403, detail="Forbidden")
     _assert_active_ai_provider(payload.ai_provider)
     course_ai_settings = _upsert_course_ai_settings(course, db, payload.ai_provider, payload.ai_model)
+    course_content_settings = _upsert_course_content_settings(course, db, payload.content_format)
     db.commit()
     db.refresh(course_ai_settings)
-    return CourseSettingsOut(ai_provider=course_ai_settings.ai_provider, ai_model=course_ai_settings.ai_model)
+    db.refresh(course_content_settings)
+    return CourseSettingsOut(
+        ai_provider=course_ai_settings.ai_provider,
+        ai_model=course_ai_settings.ai_model,
+        content_format=course_content_settings.content_format,
+    )
 
 
 @router.get("/{course_id}/book")

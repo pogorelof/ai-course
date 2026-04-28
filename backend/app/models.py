@@ -39,6 +39,9 @@ class Course(Base):
     ai_settings: Mapped[Optional["CourseAISettings"]] = relationship(
         "CourseAISettings", back_populates="course", uselist=False, cascade="all, delete-orphan"
     )
+    content_settings: Mapped[Optional["CourseContentSettings"]] = relationship(
+        "CourseContentSettings", back_populates="course", uselist=False, cascade="all, delete-orphan"
+    )
 
 
 class CourseAISettings(Base):
@@ -52,6 +55,18 @@ class CourseAISettings(Base):
     ai_model: Mapped[str] = mapped_column(String(64), nullable=False, default="gpt-5-mini")
 
     course: Mapped[Course] = relationship("Course", back_populates="ai_settings")
+
+
+class CourseContentSettings(Base):
+    __tablename__ = "course_content_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    course_id: Mapped[int] = mapped_column(
+        ForeignKey("courses.id", ondelete="CASCADE"), nullable=False, unique=True, index=True
+    )
+    content_format: Mapped[str] = mapped_column(String(16), nullable=False, default="text")
+
+    course: Mapped[Course] = relationship("Course", back_populates="content_settings")
 
 
 class UserAPIKeys(Base):

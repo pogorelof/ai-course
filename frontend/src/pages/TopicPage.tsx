@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { CoursesAPI } from '../services/api'
 import type { TopicHtmlContentDto } from '../services/api'
-import type { GeneratedTopic, TopicQuiz, TopicQuizResult } from '../types/domain'
+import type { ContentFormat, GeneratedTopic, TopicQuiz, TopicQuizResult } from '../types/domain'
 import { PageContainer } from '../components/PageContainer'
 import { LoadingPulse } from '../components/LoadingPulse'
 import { MarkdownRenderer } from '../components/MarkdownRenderer'
@@ -27,11 +27,13 @@ export function TopicPage() {
   const [title, setTitle] = useState<string | null>(null)
   const [courseId, setCourseId] = useState<number | null>(null)
   const [contentModel, setContentModel] = useState<string | null>(null)
+  const [contentFormat, setContentFormat] = useState<ContentFormat>('text')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [quiz, setQuiz] = useState<TopicQuiz | null>(null)
   const [quizLoading, setQuizLoading] = useState(false)
   const [quizError, setQuizError] = useState<string | null>(null)
+  const [quizNotice, setQuizNotice] = useState<string | null>(null)
   const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({})
   const [quizResult, setQuizResult] = useState<TopicQuizResult | null>(null)
   const [quizSubmitting, setQuizSubmitting] = useState(false)
@@ -48,40 +50,68 @@ export function TopicPage() {
       setTitle(null)
       setCourseId(null)
       setContentModel(null)
+      setContentFormat('text')
       setQuiz(null)
       setQuizLoading(false)
       setQuizError(null)
+      setQuizNotice(null)
       setSelectedAnswers({})
       setQuizResult(null)
       setHtmlLesson(null)
       setHtmlLessonError(null)
       try {
-        const data: GeneratedTopic = await CoursesAPI.generateTopic(topicId)
-        setTitle(data.course_title)
-        setCourseId(data.course_id)
-        setContent(data.content)
-        setContentModel(data.content_ai_model)
-        try {
-          const lesson = await CoursesAPI.topicHtml(topicId)
-          setHtmlLesson(lesson)
-        } catch {
-          setHtmlLesson(null)
-        }
-        setQuizLoading(true)
-        try {
-          const loadedQuiz = await CoursesAPI.topicQuiz(topicId)
-          setQuiz(loadedQuiz)
-          setQuizResult(loadedQuiz.last_result ?? null)
-        } catch {
+        const meta = await CoursesAPI.topicMeta(topicId)
+        setTitle(meta.course_title)
+        setCourseId(meta.course_id)
+        setContentModel(meta.content_ai_model ?? null)
+
+        const settings = await CoursesAPI.courseSettings(meta.course_id)
+        setContentFormat(settings.content_format)
+
+        if (settings.content_format === 'text') {
+          const data: GeneratedTopic = await CoursesAPI.generateTopic(topicId)
+          setTitle(data.course_title)
+          setCourseId(data.course_id)
+          setContent(data.content)
+          setContentModel(data.content_ai_model)
+        } else {
+          setContent(null)
           try {
-            const generatedQuiz = await CoursesAPI.generateTopicQuiz(topicId)
-            setQuiz(generatedQuiz)
-            setQuizResult(generatedQuiz.last_result ?? null)
+            const lesson = await CoursesAPI.topicHtml(topicId)
+            setHtmlLesson(lesson)
+            setContentModel(lesson.ai_model)
           } catch {
-            setQuizError('Ошибка загрузки теста')
+            setHtmlLesson(null)
           }
-        } finally {
+        }
+
+        const canUseQuiz = settings.content_format === 'text' || meta.has_text_content
+        if (canUseQuiz) {
+          setQuizLoading(true)
+          try {
+            const loadedQuiz = await CoursesAPI.topicQuiz(topicId)
+            setQuiz(loadedQuiz)
+            setQuizResult(loadedQuiz.last_result ?? null)
+          } catch {
+            if (settings.content_format === 'text') {
+              try {
+                const generatedQuiz = await CoursesAPI.generateTopicQuiz(topicId)
+                setQuiz(generatedQuiz)
+                setQuizResult(generatedQuiz.last_result ?? null)
+              } catch {
+                setQuizError('Ошибка загрузки теста')
+              }
+            } else {
+              setQuiz(null)
+              setQuizNotice('Тест пока недоступен: для новых интерактивных глав текстовый контент не генерируется автоматически.')
+            }
+          } finally {
+            setQuizLoading(false)
+          }
+        } else {
+          setQuiz(null)
           setQuizLoading(false)
+          setQuizNotice('Тест недоступен для интерактивного формата, пока не сгенерирован текстовый контент.')
         }
       } catch {
         setError('Ошибка генерации контента')
@@ -93,12 +123,13 @@ export function TopicPage() {
   }, [token, topicId])
 
   const handleGenerateInteractiveLesson = async () => {
-    if (!topicId || htmlLessonLoading) return
+    if (!topicId || htmlLessonLoading || contentFormat !== 'interactive') return
     setHtmlLessonLoading(true)
     setHtmlLessonError(null)
     try {
       const lesson = await CoursesAPI.generateTopicHtml(topicId)
       setHtmlLesson(lesson)
+      setContentModel(lesson.ai_model)
     } catch {
       setHtmlLessonError('Не удалось сгенерировать интерактивную главу. Попробуйте ещё раз.')
     } finally {
@@ -160,6 +191,9 @@ export function TopicPage() {
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', width: '100%', maxWidth: 1360, margin: '0 auto' }}>
               <div style={{ display: 'grid', gap: 6 }}>
                 <h1 className="page-hero-title">{title ? `Курс: ${title}` : 'Глава курса'}</h1>
+                <span className="topic-badge topic-badge--interactive" style={{ width: 'fit-content' }}>
+                  Формат: {contentFormat === 'interactive' ? 'интерактивный' : 'текстовый'}
+                </span>
                 {contentModel && (
                   <div className="topic-model-inline">
                     <ModelLogo size={11} model={contentModel} />
@@ -175,7 +209,7 @@ export function TopicPage() {
             </div>
             {error && <p className="status-error" style={{ textAlign: 'center' }}>{error}</p>}
 
-            {(content || htmlLesson || htmlLessonLoading) && (
+            {contentFormat === 'interactive' && (htmlLesson || htmlLessonLoading || !error) && (
               <div
                 className="interactive-lesson-bar"
                 style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}
@@ -218,7 +252,7 @@ export function TopicPage() {
               </div>
             )}
 
-            {htmlLessonLoading && !htmlLesson && (
+            {contentFormat === 'interactive' && htmlLessonLoading && !htmlLesson && (
               <div
                 className="surface-card surface-card--light"
                 style={{ width: '100%', maxWidth: 1360, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 10 }}
@@ -228,16 +262,32 @@ export function TopicPage() {
               </div>
             )}
 
-            {htmlLesson ? (
-              <div style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}>
-                <InteractiveContentFrame html={htmlLesson.html} title={`Глава: ${title ?? ''}`} />
-              </div>
-            ) : (
-              content && (
+            {contentFormat === 'interactive' ? (
+              htmlLesson ? (
+                <div style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}>
+                  <InteractiveContentFrame html={htmlLesson.html} title={`Глава: ${title ?? ''}`} />
+                </div>
+              ) : (
                 <div className="surface-card surface-card--light" style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}>
-                  <MarkdownRenderer markdown={content} />
+                  <p className="status-muted" style={{ margin: 0 }}>
+                    Интерактивная глава ещё не сгенерирована. Нажмите «Сгенерировать интерактивную главу».
+                  </p>
                 </div>
               )
+            ) : (
+              <div style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}>
+                {content ? (
+                  <div className="surface-card surface-card--light" style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}>
+                    <MarkdownRenderer markdown={content} />
+                  </div>
+                ) : (
+                  <div className="surface-card surface-card--light" style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}>
+                    <p className="status-muted" style={{ margin: 0 }}>
+                      Текстовая глава ещё не сгенерирована.
+                    </p>
+                  </div>
+                )}
+              </div>
             )}
 
             <section className="surface-card surface-card--light quiz-card" style={{ width: '100%', maxWidth: 1360, margin: '0 auto' }}>
@@ -260,6 +310,7 @@ export function TopicPage() {
                 )}
 
                 {quizError && <p className="status-error">{quizError}</p>}
+                {quizNotice && <p className="status-muted">{quizNotice}</p>}
 
                 {!quizLoading && quiz && (
                   <>
