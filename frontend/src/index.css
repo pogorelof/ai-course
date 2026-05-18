@@ -1010,3 +1010,54 @@ textarea {
     justify-content: flex-start;
   }
 }
+
+/* Diagnostic on/off toggle before new course */
+.diagnostic-field {
+  padding: 12px 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.diagnostic-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.diagnostic-toggle-caption {
+  font-weight: 500;
+  font-size: 15px;
+}
+
+.diagnostic-toggle-btn {
+  min-width: 72px;
+  border-radius: 980px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: rgba(0, 0, 0, 0.06);
+  color: rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.diagnostic-toggle-btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.09);
+  color: rgba(0, 0, 0, 0.55);
+}
+
+.diagnostic-toggle-btn--on {
+  background: var(--color-apple-blue);
+  border-color: var(--color-apple-blue);
+  color: var(--color-white);
+}
+
+.diagnostic-toggle-btn--on:hover:not(:disabled) {
+  background: #0077ed;
+  border-color: #0077ed;
+  color: var(--color-white);
+}

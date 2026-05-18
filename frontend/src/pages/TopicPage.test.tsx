@@ -54,8 +54,11 @@ const baseTopicMeta = {
   course_title: 'Demo',
   topic_title: 'Topic 1',
   content_ai_model: 'gpt-5-mini',
+  content_ai_provider: 'openai' as const,
   has_text_content: false,
   has_html_content: false,
+  html_ai_model: null as string | null,
+  html_ai_provider: null as string | null,
 }
 
 describe('TopicPage quiz flow', () => {
@@ -82,7 +85,7 @@ describe('TopicPage quiz flow', () => {
     mockCoursesApi.streamTopic.mockImplementation(async (_topicId: unknown, onEvent: (event: unknown) => void) => {
       onEvent({ type: 'started', topic_id: 100, course_id: 10, ai_model: 'gpt-5-mini', ai_provider: 'openai', course_title: 'Demo' })
       onEvent({ type: 'chunk', delta: 'Chapter body' })
-      onEvent({ type: 'done', from_cache: false, content: 'Chapter body', ai_model: 'gpt-5-mini' })
+      onEvent({ type: 'done', from_cache: false, content: 'Chapter body', ai_model: 'gpt-5-mini', ai_provider: 'openai' })
     })
     mockCoursesApi.topicQuiz
       .mockRejectedValueOnce(new Error('not-found'))
@@ -149,7 +152,10 @@ describe('TopicPage interactive lesson', () => {
     storage.clear()
     mockCoursesApi.topicMeta.mockResolvedValue({
       ...baseTopicMeta,
+      has_html_content: true,
       has_text_content: false,
+      html_ai_model: 'gpt-5-mini',
+      html_ai_provider: 'openai',
     })
   })
 
@@ -188,6 +194,13 @@ describe('TopicPage interactive lesson', () => {
   it('generates interactive lesson on click when none exists yet', async () => {
     localStorage.setItem('access_token', 'token')
 
+    mockCoursesApi.topicMeta.mockResolvedValue({
+      ...baseTopicMeta,
+      has_html_content: false,
+      has_text_content: false,
+      html_ai_model: null,
+      html_ai_provider: null,
+    })
     mockCoursesApi.topicHtml.mockRejectedValue(new Error('not-found'))
     mockCoursesApi.streamTopicHtml.mockImplementation(async (_topicId: unknown, onEvent: (event: unknown) => void) => {
       onEvent({ type: 'started', topic_id: 100, course_id: 10, ai_model: 'gpt-5-mini', ai_provider: 'openai', course_title: 'Demo' })

@@ -32,6 +32,10 @@ const isLlamaModel = (model: string | null | undefined) => {
   return normalizeModelBase(model).startsWith('llama-')
 }
 
+const pathIncludes = (model: string | null | undefined, needle: string) => {
+  return (model ?? '').toLowerCase().includes(needle)
+}
+
 export function ModelLogo({ size = 14, model, provider }: { size?: number; model?: string | null; provider?: SupportedProvider }) {
   let src: string | null = null
   let alt = ''
@@ -48,6 +52,15 @@ export function ModelLogo({ size = 14, model, provider }: { size?: number; model
   } else if (isLlamaModel(model)) {
     src = '/meta.svg'
     alt = 'Meta Llama'
+  } else if (pathIncludes(model, 'minimax/')) {
+    src = '/minimax.svg'
+    alt = 'MiniMax'
+  } else if (pathIncludes(model, 'nvidia/')) {
+    src = '/nvidia.svg'
+    alt = 'NVIDIA'
+  } else if (pathIncludes(model, 'qwen/')) {
+    src = '/qwen.svg'
+    alt = 'Qwen'
   } else if (provider === 'openai' || isOpenAIModel(model)) {
     src = '/openai.svg'
     alt = 'OpenAI'

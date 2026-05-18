@@ -29,6 +29,10 @@ SUPPORTED_OPENROUTER_BASE_MODELS = (
     "meta-llama/llama-4-maverick",
     "google/gemma-4-31b-it",
     "openai/gpt-oss-120b",
+    "minimax/minimax-m2.5",
+    "nvidia/nemotron-3-super-120b-a12b",
+    "qwen/qwen3-coder",
+    "qwen/qwen3.6-plus",
 )
 NITRO_SUFFIX = ":nitro"
 SUPPORTED_CONTENT_FORMATS = ("text", "interactive")
@@ -127,6 +131,83 @@ class CourseCreate(BaseModel):
             raise ValueError("Unsupported ai_model for openrouter")
         return self
 
+
+class DiagnosticQuestionsInput(BaseModel):
+    title: str
+    wishes: str = ""
+    ai_provider: str = "openai"
+    ai_model: str = "gpt-5-mini"
+    reasoning_effort: str = "minimal"
+
+    @field_validator("title")
+    @classmethod
+    def validate_title_nonempty(cls, v: str) -> str:
+        t = v.strip()
+        if not t:
+            raise ValueError("title cannot be empty")
+        return t
+
+    @field_validator("wishes", mode="before")
+    @classmethod
+    def wishes_coerce(cls, v) -> str:
+        if v is None:
+            return ""
+        return str(v).strip()
+
+    @field_validator("ai_provider")
+    @classmethod
+    def validate_ai_provider_diag(cls, v: str) -> str:
+        normalized = v.strip().lower()
+        if normalized not in SUPPORTED_AI_PROVIDERS:
+            raise ValueError("Unsupported ai_provider")
+        return normalized
+
+    @field_validator("ai_model")
+    @classmethod
+    def validate_ai_model_diag(cls, v: str) -> str:
+        return v.strip()
+
+    @field_validator("reasoning_effort")
+    @classmethod
+    def validate_reasoning_effort_diag(cls, v: str) -> str:
+        normalized = (v or "minimal").strip().lower()
+        if normalized not in SUPPORTED_REASONING_EFFORTS:
+            raise ValueError("Unsupported reasoning_effort")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_provider_model_diag(self):
+        if self.ai_provider == "openai" and self.ai_model not in SUPPORTED_OPENAI_MODELS:
+            raise ValueError("Unsupported ai_model for openai")
+        if self.ai_provider == "openrouter" and not _is_supported_openrouter_model(self.ai_model):
+            raise ValueError("Unsupported ai_model for openrouter")
+        return self
+
+
+class DiagnosticQuestionsOut(BaseModel):
+    questions: List[str]
+
+
+class DiagnosticEvaluateInput(DiagnosticQuestionsInput):
+    questions: List[str]
+    answers: List[str]
+
+    @model_validator(mode="after")
+    def validate_lengths(self):
+        if len(self.questions) != 5 or len(self.answers) != 5:
+            raise ValueError("Exactly 5 questions and 5 answers are required")
+        for i, (q, a) in enumerate(zip(self.questions, self.answers)):
+            if not str(q).strip():
+                raise ValueError(f"Question {i + 1} is empty")
+            if not str(a).strip():
+                raise ValueError(f"Answer {i + 1} is empty")
+        return self
+
+
+class DiagnosticEvaluateOut(BaseModel):
+    summary: str
+
+
 class CourseOut(BaseModel):
     id: int
     title: str
@@ -151,6 +232,7 @@ class TopicOut(BaseModel):
     has_passed_quiz: bool = False
     has_attempts: bool = False
     has_html_content: bool = False
+    html_ai_model: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -175,8 +257,11 @@ class TopicMetaOut(BaseModel):
     course_title: str
     topic_title: str
     content_ai_model: Optional[str] = None
+    content_ai_provider: Optional[str] = None
     has_text_content: bool = False
     has_html_content: bool = False
+    html_ai_model: Optional[str] = None
+    html_ai_provider: Optional[str] = None
 
 
 class TopicHtmlContentOut(BaseModel):

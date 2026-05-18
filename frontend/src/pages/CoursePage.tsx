@@ -34,6 +34,10 @@ const OPENROUTER_MODELS = [
   { id: 'meta-llama/llama-4-maverick', label: 'meta-llama/llama-4-maverick', inputPrice: '$0.15', outputPrice: '$0.60' },
   { id: 'google/gemma-4-31b-it', label: 'google/gemma-4-31b-it', inputPrice: '$0.13', outputPrice: '$0.38' },
   { id: 'openai/gpt-oss-120b', label: 'openai/gpt-oss-120b', inputPrice: '$0.35', outputPrice: '$0.75' },
+  { id: 'minimax/minimax-m2.5', label: 'minimax/minimax-m2.5', inputPrice: '$0.15', outputPrice: '$1.15' },
+  { id: 'nvidia/nemotron-3-super-120b-a12b', label: 'nvidia/nemotron-3-super-120b-a12b', inputPrice: '$0.09', outputPrice: '$0.45' },
+  { id: 'qwen/qwen3-coder', label: 'qwen/qwen3-coder', inputPrice: '$0.22', outputPrice: '$1.80' },
+  { id: 'qwen/qwen3.6-plus', label: 'qwen/qwen3.6-plus', inputPrice: '$0.325', outputPrice: '$1.95' },
 ] as const
 
 const isNitroModel = (modelId: string) => modelId.endsWith(NITRO_SUFFIX)
@@ -239,16 +243,36 @@ export function CoursePage() {
                     {t.has_passed_quiz ? `Тест: ${t.last_score_percent}%` : `Тест не пройден: ${t.last_score_percent}%`}
                   </span>
                 )}
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span className={`topic-model ${t.content_ai_model ? '' : 'topic-model--pending'}`}>
-                    <ModelLogo size={11} model={t.content_ai_model} />
-                    <span>{t.content_ai_model ?? 'не сгенерировано'}</span>
-                  </span>
-                  {t.has_html_content && (
-                    <span className="topic-badge topic-badge--interactive" title="Доступна интерактивная HTML-глава">
-                      Интерактивная
+                <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
+                  <div
+                    className="topic-model-inline"
+                    style={{ flexWrap: 'wrap', fontSize: '0.88rem', lineHeight: 1.45 }}
+                  >
+                    <span className="status-muted" style={{ minWidth: 120 }}>
+                      Текстовая версия:
                     </span>
-                  )}
+                    {t.content_ai_model ? (
+                      <>
+                        <ModelLogo size={11} model={t.content_ai_model} />
+                        <span>{t.content_ai_model}</span>
+                      </>
+                    ) : (
+                      <span className="status-muted">ещё не сгенерирована</span>
+                    )}
+                  </div>
+                  <div className="topic-model-inline" style={{ flexWrap: 'wrap', fontSize: '0.88rem' }}>
+                    <span className="status-muted" style={{ minWidth: 120 }}>
+                      Интерактив:
+                    </span>
+                    {t.has_html_content && t.html_ai_model ? (
+                      <>
+                        <ModelLogo size={11} model={t.html_ai_model} />
+                        <span>{t.html_ai_model}</span>
+                      </>
+                    ) : (
+                      <span className="status-muted">ещё не сгенерирован</span>
+                    )}
+                  </div>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>

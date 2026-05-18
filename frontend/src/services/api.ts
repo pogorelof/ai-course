@@ -55,7 +55,7 @@ export async function apiFetch<T>(path: string, options: { method?: HttpMethod; 
 
 export type StreamEvent =
   | { type: 'started'; topic_id: number; course_id: number; ai_model: string; ai_provider: string; course_title: string }
-  | { type: 'cached'; content: string; ai_model: string }
+  | { type: 'cached'; content: string; ai_model: string; ai_provider: string }
   | { type: 'chunk'; delta: string }
   | { type: 'done'; from_cache?: boolean; content?: string; html?: string; ai_model?: string; ai_provider?: string; generated_at?: string | null }
   | { type: 'error'; detail: string }
@@ -148,8 +148,11 @@ export type TopicMetaDto = {
   course_title: string
   topic_title: string
   content_ai_model?: string | null
+  content_ai_provider?: string | null
   has_text_content: boolean
   has_html_content: boolean
+  html_ai_model?: string | null
+  html_ai_provider?: string | null
 }
 
 export const CoursesAPI = {
@@ -181,6 +184,26 @@ export const CoursesAPI = {
     }
     return apiFetch('/courses/outline', { method: 'POST', body: formData, auth: true })
   },
+  async diagnosticQuestions(payload: {
+    title: string
+    wishes: string
+    ai_provider: 'openai' | 'openrouter'
+    ai_model: string
+    reasoning_effort?: 'minimal' | 'low' | 'medium' | 'high'
+  }): Promise<{ questions: string[] }> {
+    return apiFetch('/courses/diagnostic/questions', { method: 'POST', auth: true, body: payload })
+  },
+  async diagnosticEvaluate(payload: {
+    title: string
+    wishes: string
+    questions: string[]
+    answers: string[]
+    ai_provider: 'openai' | 'openrouter'
+    ai_model: string
+    reasoning_effort?: 'minimal' | 'low' | 'medium' | 'high'
+  }): Promise<{ summary: string }> {
+    return apiFetch('/courses/diagnostic/evaluate', { method: 'POST', auth: true, body: payload })
+  },
   async courseTopics(courseId: number | string): Promise<Array<{
     id: number
     title: string
@@ -189,6 +212,7 @@ export const CoursesAPI = {
     has_passed_quiz?: boolean
     has_attempts?: boolean
     has_html_content?: boolean
+    html_ai_model?: string | null
   }>> {
     return apiFetch(`/courses/${courseId}/topics`, { auth: true })
   },

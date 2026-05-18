@@ -28,6 +28,7 @@ export type Topic = {
   has_passed_quiz?: boolean
   has_attempts?: boolean
   has_html_content?: boolean
+  html_ai_model?: string | null
 }
 
 export type GeneratedTopic = {
@@ -44,8 +45,11 @@ export type TopicMeta = {
   course_title: string
   topic_title: string
   content_ai_model?: string | null
+  content_ai_provider?: string | null
   has_text_content: boolean
   has_html_content: boolean
+  html_ai_model?: string | null
+  html_ai_provider?: string | null
 }
 
 export type TopicHtmlContent = {

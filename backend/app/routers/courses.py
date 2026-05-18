@@ -38,6 +38,10 @@ from ..schemas import (
     CourseOutlineResponse,
     CourseSettingsOut,
     CourseSettingsUpdateInput,
+    DiagnosticEvaluateInput,
+    DiagnosticEvaluateOut,
+    DiagnosticQuestionsInput,
+    DiagnosticQuestionsOut,
     QuizQuestionOut,
     QuizResultOut,
     QuizSubmitInput,
@@ -51,7 +55,9 @@ from ..schemas import (
 )
 from ..services.ai import (
     extract_text_from_pdf,
+    evaluate_diagnostic_answers,
     generate_course_outline,
+    generate_diagnostic_questions,
     generate_topic_content,
     generate_topic_html,
     generate_topic_quiz,
@@ -163,13 +169,18 @@ def _upsert_course_content_settings(course: Course, db: Session, content_format:
     return settings
 
 
-def _resolve_topic_content_model(topic: CourseTopic, db: Session) -> Optional[str]:
+def _resolve_topic_content_ai(topic: CourseTopic, db: Session) -> tuple[Optional[str], Optional[str]]:
     meta = db.scalar(select(TopicContentGeneration).where(TopicContentGeneration.topic_id == topic.id))
     if meta:
-        return meta.ai_model
+        return meta.ai_model, meta.ai_provider
     if topic.content and topic.content.strip():
-        return LEGACY_DEFAULT_CONTENT_MODEL
-    return None
+        return LEGACY_DEFAULT_CONTENT_MODEL, "openai"
+    return None, None
+
+
+def _resolve_topic_content_model(topic: CourseTopic, db: Session) -> Optional[str]:
+    model_name, _ = _resolve_topic_content_ai(topic, db)
+    return model_name
 
 
 def _upsert_topic_content_generation(topic_id: int, ai_provider: str, ai_model: str, db: Session) -> None:
@@ -198,6 +209,68 @@ def _upsert_topic_html_content(topic_id: int, html: str, ai_provider: str, ai_mo
         record.generated_at = datetime.utcnow()
     db.add(record)
     return record
+
+
+@router.post("/diagnostic/questions", response_model=DiagnosticQuestionsOut)
+async def create_diagnostic_questions(
+    payload: DiagnosticQuestionsInput,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _assert_active_ai_provider(payload.ai_provider)
+    user_api_key = _require_user_api_key(current_user.id, payload.ai_provider, db)
+    try:
+        questions = await generate_diagnostic_questions(
+            payload.title,
+            payload.wishes,
+            model=payload.ai_model,
+            provider=payload.ai_provider,
+            api_key=user_api_key,
+            reasoning_effort=payload.reasoning_effort,
+        )
+    except OpenAIError as e:
+        logger.exception(
+            "diagnostic questions failed: user_id=%s error=%s",
+            current_user.id,
+            str(e),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
+    return DiagnosticQuestionsOut(questions=questions)
+
+
+@router.post("/diagnostic/evaluate", response_model=DiagnosticEvaluateOut)
+async def evaluate_diagnostic(
+    payload: DiagnosticEvaluateInput,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _assert_active_ai_provider(payload.ai_provider)
+    user_api_key = _require_user_api_key(current_user.id, payload.ai_provider, db)
+    try:
+        summary = await evaluate_diagnostic_answers(
+            payload.title,
+            payload.wishes,
+            payload.questions,
+            payload.answers,
+            model=payload.ai_model,
+            provider=payload.ai_provider,
+            api_key=user_api_key,
+            reasoning_effort=payload.reasoning_effort,
+        )
+    except OpenAIError as e:
+        logger.exception(
+            "diagnostic evaluate failed: user_id=%s error=%s",
+            current_user.id,
+            str(e),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
+    return DiagnosticEvaluateOut(summary=summary)
 
 
 @router.post("/outline", response_model=CourseOutlineResponse)
@@ -399,7 +472,6 @@ async def generate_content_stream(
     api_key = _require_user_api_key(current_user.id, ai_provider, db)
 
     cached_content = topic.content if (topic.content and topic.content.strip()) else None
-    cached_model = _resolve_topic_content_model(topic, db) if cached_content else None
 
     pdf_text = None
     if course.pdf_path and os.path.exists(course.pdf_path):
@@ -424,11 +496,13 @@ async def generate_content_stream(
             }
         )
         if cached_content is not None:
+            cm, cp = _resolve_topic_content_ai(topic, db)
             yield _sse_pack(
                 {
                     "type": "cached",
                     "content": cached_content,
-                    "ai_model": cached_model or LEGACY_DEFAULT_CONTENT_MODEL,
+                    "ai_model": cm or LEGACY_DEFAULT_CONTENT_MODEL,
+                    "ai_provider": cp or "openai",
                 }
             )
             yield _sse_pack({"type": "done", "from_cache": True})
@@ -488,6 +562,7 @@ async def generate_content_stream(
                 "from_cache": False,
                 "content": full_text,
                 "ai_model": ai_model,
+                "ai_provider": ai_provider,
             }
         )
 
@@ -763,15 +838,20 @@ def submit_topic_quiz(
 @router.get("/topics/{topic_id}/meta", response_model=TopicMetaOut)
 def get_topic_meta(topic_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     topic, course = _get_topic_and_course_or_404(topic_id, db, current_user.id)
-    has_html = db.scalar(select(TopicHtmlContent.id).where(TopicHtmlContent.topic_id == topic.id)) is not None
+    html_row = db.scalar(select(TopicHtmlContent).where(TopicHtmlContent.topic_id == topic.id))
+    has_html = html_row is not None
+    text_model, text_provider = _resolve_topic_content_ai(topic, db)
     return TopicMetaOut(
         topic_id=topic.id,
         course_id=course.id,
         course_title=course.title,
         topic_title=topic.title,
-        content_ai_model=_resolve_topic_content_model(topic, db),
+        content_ai_model=text_model,
+        content_ai_provider=text_provider,
         has_text_content=bool(topic.content and topic.content.strip()),
         has_html_content=has_html,
+        html_ai_model=html_row.ai_model if html_row else None,
+        html_ai_provider=html_row.ai_provider if html_row else None,
     )
 
 
@@ -1053,13 +1133,12 @@ def list_course_topics(course_id: int, db: Session = Depends(get_db), current_us
     topics = db.scalars(select(CourseTopic).where(CourseTopic.course_id == course_id)).all()
 
     topic_ids = [topic.id for topic in topics]
-    html_topic_ids: set[int] = set()
+    html_rows_by_topic_id: dict[int, TopicHtmlContent] = {}
     if topic_ids:
-        html_topic_ids = set(
-            db.scalars(
-                select(TopicHtmlContent.topic_id).where(TopicHtmlContent.topic_id.in_(topic_ids))
-            ).all()
-        )
+        html_rows = db.scalars(
+            select(TopicHtmlContent).where(TopicHtmlContent.topic_id.in_(topic_ids))
+        ).all()
+        html_rows_by_topic_id = {row.topic_id: row for row in html_rows}
 
     result: list[TopicOut] = []
     for topic in topics:
@@ -1086,7 +1165,8 @@ def list_course_topics(course_id: int, db: Session = Depends(get_db), current_us
                 last_score_percent=last_score,
                 has_attempts=has_attempts,
                 has_passed_quiz=has_passed_quiz,
-                has_html_content=topic.id in html_topic_ids,
+                has_html_content=topic.id in html_rows_by_topic_id,
+                html_ai_model=(html_rows_by_topic_id[topic.id].ai_model if topic.id in html_rows_by_topic_id else None),
             )
         )
     return result

@@ -237,6 +237,9 @@ def test_topic_meta_returns_course_topic_and_format_flags(client: TestClient, au
     assert body["topic_title"]
     assert body["has_text_content"] is False
     assert body["has_html_content"] is False
+    assert body.get("content_ai_provider") is None
+    assert body.get("html_ai_model") is None
+    assert body.get("html_ai_provider") is None
 
 
 def test_generate_quiz_creates_once_and_reuses(client: TestClient, auth_headers):
@@ -367,6 +370,7 @@ def test_topics_list_marks_has_html_content(client: TestClient, auth_headers):
     assert listed_before.status_code == 200
     target_before = next(item for item in listed_before.json() if item["id"] == topic_id)
     assert target_before["has_html_content"] is False
+    assert target_before["html_ai_model"] is None
 
     with patch_async("app.routers.courses.generate_topic_html", return_value=SAMPLE_HTML_DOCUMENT):
         created = client.post(f"/courses/topics/{topic_id}/content/html", headers=auth_headers())
@@ -376,5 +380,46 @@ def test_topics_list_marks_has_html_content(client: TestClient, auth_headers):
     assert listed_after.status_code == 200
     target_after = next(item for item in listed_after.json() if item["id"] == topic_id)
     assert target_after["has_html_content"] is True
+    assert target_after["html_ai_model"] == created.json()["ai_model"]
     others = [item for item in listed_after.json() if item["id"] != topic_id]
     assert all(item["has_html_content"] is False for item in others)
+
+
+def test_diagnostic_questions_endpoint(client: TestClient, auth_headers):
+    five = [f"Открытый вопрос {i}?" for i in range(5)]
+    with patch_async("app.routers.courses.generate_diagnostic_questions", return_value=five):
+        r = client.post(
+            "/courses/diagnostic/questions",
+            json={
+                "title": "Линейная алгебра",
+                "wishes": "базовый уровень",
+                "ai_provider": "openai",
+                "ai_model": "gpt-5-mini",
+                "reasoning_effort": "minimal",
+            },
+            headers=auth_headers(),
+        )
+    assert r.status_code == 200
+    assert r.json()["questions"] == five
+
+
+def test_diagnostic_evaluate_endpoint(client: TestClient, auth_headers):
+    summary = "средний"
+    qs = [f"Q{i}" for i in range(5)]
+    ans = [f"A{i}" for i in range(5)]
+    with patch_async("app.routers.courses.evaluate_diagnostic_answers", return_value=summary):
+        r = client.post(
+            "/courses/diagnostic/evaluate",
+            json={
+                "title": "Статистика",
+                "wishes": "",
+                "questions": qs,
+                "answers": ans,
+                "ai_provider": "openai",
+                "ai_model": "gpt-5-mini",
+                "reasoning_effort": "minimal",
+            },
+            headers=auth_headers(),
+        )
+    assert r.status_code == 200
+    assert r.json()["summary"] == summary

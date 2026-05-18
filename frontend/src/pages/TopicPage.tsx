@@ -11,6 +11,13 @@ import { ModelLogo } from '../components/ModelLogo'
 
 export type TopicViewMode = 'text' | 'interactive'
 
+function formatAiProviderLabel(provider: string | null | undefined): string | null {
+  if (!provider) return null
+  if (provider === 'openai') return 'OpenAI'
+  if (provider === 'openrouter') return 'OpenRouter'
+  return provider
+}
+
 function formatGeneratedAt(value: string | null | undefined): string | null {
   if (!value) return null
   try {
@@ -45,7 +52,14 @@ export function TopicPage() {
   const [content, setContent] = useState<string | null>(null)
   const [title, setTitle] = useState<string | null>(null)
   const [courseId, setCourseId] = useState<number | null>(null)
-  const [contentModel, setContentModel] = useState<string | null>(null)
+  const [topicTextAi, setTopicTextAi] = useState<{ model: string | null; provider: string | null }>({
+    model: null,
+    provider: null,
+  })
+  const [topicHtmlAi, setTopicHtmlAi] = useState<{ model: string | null; provider: string | null }>({
+    model: null,
+    provider: null,
+  })
   const [textError, setTextError] = useState<string | null>(null)
   const [quiz, setQuiz] = useState<TopicQuiz | null>(null)
   const [quizLoading, setQuizLoading] = useState(false)
@@ -80,7 +94,8 @@ export function TopicPage() {
       setContent(null)
       setTitle(null)
       setCourseId(null)
-      setContentModel(null)
+      setTopicTextAi({ model: null, provider: null })
+      setTopicHtmlAi({ model: null, provider: null })
       setTextError(null)
       setQuiz(null)
       setQuizLoading(false)
@@ -99,7 +114,14 @@ export function TopicPage() {
         setMeta(m)
         setTitle(m.course_title)
         setCourseId(m.course_id)
-        setContentModel(m.content_ai_model ?? null)
+        setTopicTextAi({
+          model: m.content_ai_model ?? null,
+          provider: m.content_ai_provider ?? null,
+        })
+        setTopicHtmlAi({
+          model: m.html_ai_model ?? null,
+          provider: m.html_ai_provider ?? null,
+        })
       } catch {
         if (!cancelled) setTextError('Не удалось загрузить главу')
       } finally {
@@ -153,12 +175,12 @@ export function TopicPage() {
             if (event.type === 'started') {
               setTitle(event.course_title)
               setCourseId(event.course_id)
-              setContentModel(event.ai_model)
+              setTopicTextAi({ model: event.ai_model, provider: event.ai_provider })
             } else if (event.type === 'cached') {
               usedCache = true
               accumulated = event.content
               setContent(event.content)
-              setContentModel(event.ai_model)
+              setTopicTextAi({ model: event.ai_model, provider: event.ai_provider })
               setStreamedBytes(event.content.length)
             } else if (event.type === 'chunk') {
               accumulated += event.delta
@@ -169,7 +191,12 @@ export function TopicPage() {
                 accumulated = event.content
                 setContent(event.content)
               }
-              if (event.ai_model) setContentModel(event.ai_model)
+              if (event.ai_model) {
+                setTopicTextAi(prev => ({
+                  model: event.ai_model ?? prev.model,
+                  provider: event.ai_provider ?? prev.provider,
+                }))
+              }
             } else if (event.type === 'error') {
               throw new Error(event.detail || 'stream error')
             }
@@ -209,7 +236,7 @@ export function TopicPage() {
         const lesson = await CoursesAPI.topicHtml(topicId)
         if (!cancelled) {
           setHtmlLesson(lesson)
-          setContentModel(lesson.ai_model)
+          setTopicHtmlAi({ model: lesson.ai_model, provider: lesson.ai_provider ?? null })
         }
       } catch {
         if (!cancelled) setHtmlLesson(null)
@@ -287,7 +314,9 @@ export function TopicPage() {
       await CoursesAPI.streamTopicHtml(
         topicId,
         event => {
-          if (event.type === 'chunk') {
+          if (event.type === 'started') {
+            setTopicHtmlAi({ model: event.ai_model, provider: event.ai_provider })
+          } else if (event.type === 'chunk') {
             accumulated += event.delta
             setStreamedBytes(accumulated.length)
           } else if (event.type === 'done' && event.html) {
@@ -300,7 +329,12 @@ export function TopicPage() {
               ai_model: event.ai_model ?? '',
               generated_at: event.generated_at ?? new Date().toISOString(),
             })
-            if (event.ai_model) setContentModel(event.ai_model)
+            if (event.ai_model) {
+              setTopicHtmlAi({
+                model: event.ai_model,
+                provider: (event.ai_provider as string | undefined) ?? null,
+              })
+            }
           } else if (event.type === 'error') {
             errorDetail = event.detail
           }
@@ -391,12 +425,40 @@ export function TopicPage() {
                     Тема: {meta.topic_title}
                   </p>
                 )}
-                {contentModel && (
-                  <div className="topic-model-inline">
-                    <ModelLogo size={11} model={contentModel} />
-                    <span>{contentModel}</span>
+                <div className="topic-ai-lineage" style={{ display: 'grid', gap: 6, marginTop: 2 }}>
+                  <div className="topic-model-inline" style={{ flexWrap: 'wrap' }}>
+                    <span className="status-muted" style={{ minWidth: 100, fontSize: '0.88rem' }}>
+                      Текстовая версия:
+                    </span>
+                    {topicTextAi.model ? (
+                      <>
+                        <ModelLogo size={11} model={topicTextAi.model} />
+                        <span>{topicTextAi.model}</span>
+                        {formatAiProviderLabel(topicTextAi.provider) && (
+                          <span className="status-muted">· {formatAiProviderLabel(topicTextAi.provider)}</span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="status-muted">ещё не сгенерирована</span>
+                    )}
                   </div>
-                )}
+                  <div className="topic-model-inline" style={{ flexWrap: 'wrap' }}>
+                    <span className="status-muted" style={{ minWidth: 100, fontSize: '0.88rem' }}>
+                      Интерактив:
+                    </span>
+                    {topicHtmlAi.model ? (
+                      <>
+                        <ModelLogo size={11} model={topicHtmlAi.model} />
+                        <span>{topicHtmlAi.model}</span>
+                        {formatAiProviderLabel(topicHtmlAi.provider) && (
+                          <span className="status-muted">· {formatAiProviderLabel(topicHtmlAi.provider)}</span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="status-muted">ещё не сгенерирован</span>
+                    )}
+                  </div>
+                </div>
               </div>
               {courseId && (
                 <Link to={`/courses/${courseId}`} className="btn btn-pill">
@@ -447,6 +509,9 @@ export function TopicPage() {
                       <span className="interactive-lesson-bar-title">Интерактивная глава готова</span>
                       <span className="status-muted">
                         Модель: {htmlLesson.ai_model}
+                        {formatAiProviderLabel(htmlLesson.ai_provider)
+                          ? ` · ${formatAiProviderLabel(htmlLesson.ai_provider)}`
+                          : ''}
                         {formattedGeneratedAt ? ` · сгенерировано ${formattedGeneratedAt}` : ''}
                       </span>
                     </>

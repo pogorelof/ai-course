@@ -11,6 +11,8 @@ from openai import AsyncOpenAI, OpenAIError
 from .prompts import (
     COURSE_OUTLINE_PDF_APPENDIX,
     COURSE_OUTLINE_SYSTEM_PROMPT,
+    DIAGNOSTIC_EVAL_SYSTEM_PROMPT,
+    DIAGNOSTIC_QUESTIONS_SYSTEM_PROMPT,
     QUIZ_ADVICE_SYSTEM_PROMPT,
     TOPIC_CONTENT_PDF_APPENDIX,
     TOPIC_CONTENT_SYSTEM_PROMPT,
@@ -23,6 +25,15 @@ from .prompts import (
 MAX_HTML_DOCUMENT_LENGTH = 200_000
 PDF_TEXT_MAX_CHARS = 50_000
 HTTPX_TIMEOUT_SECONDS = 180.0
+
+DIAGNOSTIC_LEVEL_KEYS = frozenset({"very_low", "beginner", "intermediate", "advanced", "professional"})
+DIAGNOSTIC_LEVEL_LABEL_RU: Dict[str, str] = {
+    "very_low": "самый низкий уровень знаний",
+    "beginner": "начинающий",
+    "intermediate": "средний",
+    "advanced": "высокий",
+    "professional": "профессионал",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -63,6 +74,21 @@ def model_supports_reasoning(model: str) -> bool:
     return any(base.startswith(prefix) for prefix in _REASONING_MODEL_PREFIXES)
 
 
+def _api_reasoning_effort(model: str, effort: str) -> str:
+    """Translate stored course setting to what the upstream API accepts.
+
+    Several GPT-5.4 / GPT-5.5 OpenAI models expect ``none`` instead of ``minimal``
+    (see invalid_request_error: unsupported_value for ``reasoning_effort``).
+    """
+    e = effort.strip().lower()
+    if e != "minimal":
+        return e
+    base = _normalize_model_name(model)
+    if base.startswith("gpt-5.4") or base.startswith("gpt-5.5"):
+        return "none"
+    return e
+
+
 def _reasoning_kwargs(model: str, reasoning_effort: Optional[str]) -> dict:
     """Build the ``extra_body`` payload for a single chat completion call.
 
@@ -76,7 +102,8 @@ def _reasoning_kwargs(model: str, reasoning_effort: Optional[str]) -> dict:
         return {}
     if not model_supports_reasoning(model):
         return {}
-    return {"extra_body": {"reasoning_effort": effort}}
+    api_effort = _api_reasoning_effort(model, effort)
+    return {"extra_body": {"reasoning_effort": api_effort}}
 
 
 # ---------------------------------------------------------------------------
@@ -317,6 +344,93 @@ async def _chat_completion_json(
 # ---------------------------------------------------------------------------
 # Public async generators (non-streaming).
 # ---------------------------------------------------------------------------
+
+
+async def generate_diagnostic_questions(
+    title: str,
+    wishes: str,
+    model: str,
+    provider: str = "openai",
+    api_key: Optional[str] = None,
+    reasoning_effort: Optional[str] = None,
+) -> List[str]:
+    prefs = (wishes or "").strip()
+    user_task = (
+        f"Тема курса: {title.strip()}\n"
+        f"Пожелания ученика (могут быть пустыми): {prefs or '—'}\n"
+        "Сгенерируй ровно 5 вопросов."
+    )
+    messages = [
+        {"role": "system", "content": DIAGNOSTIC_QUESTIONS_SYSTEM_PROMPT},
+        {"role": "user", "content": user_task},
+    ]
+    client = _get_async_client(api_key=api_key, provider=provider)
+    resp = await _chat_completion_json(
+        client,
+        "generate_diagnostic_questions",
+        provider=provider,
+        model=model,
+        messages=messages,
+        reasoning_effort=reasoning_effort,
+    )
+    text = _extract_response_text(resp, "generate_diagnostic_questions")
+    data = _parse_json_response(text, "generate_diagnostic_questions")
+    raw = data.get("questions")
+    if not isinstance(raw, list) or len(raw) != 5:
+        raise OpenAIError("generate_diagnostic_questions: expected exactly 5 questions")
+    out: List[str] = []
+    for item in raw:
+        q = str(item).strip()
+        if not q:
+            raise OpenAIError("generate_diagnostic_questions: empty question")
+        out.append(q)
+    return out
+
+
+async def evaluate_diagnostic_answers(
+    title: str,
+    wishes: str,
+    questions: List[str],
+    answers: List[str],
+    model: str,
+    provider: str = "openai",
+    api_key: Optional[str] = None,
+    reasoning_effort: Optional[str] = None,
+) -> str:
+    prefs = (wishes or "").strip()
+    lines: List[str] = []
+    for i in range(5):
+        lines.append(f"Вопрос {i + 1}: {questions[i]}")
+        lines.append(f"Ответ ученика: {answers[i]}")
+    qa_block = "\n".join(lines)
+    user_task = (
+        f"Тема курса: {title.strip()}\n"
+        f"Пожелания ученика: {prefs or '—'}\n\n"
+        f"Диалог диагностики:\n{qa_block}\n\n"
+        "Верни ровно один уровень в поле level (JSON)."
+    )
+    messages = [
+        {"role": "system", "content": DIAGNOSTIC_EVAL_SYSTEM_PROMPT},
+        {"role": "user", "content": user_task},
+    ]
+    client = _get_async_client(api_key=api_key, provider=provider)
+    resp = await _chat_completion_json(
+        client,
+        "evaluate_diagnostic_answers",
+        provider=provider,
+        model=model,
+        messages=messages,
+        reasoning_effort=reasoning_effort,
+    )
+    text = _extract_response_text(resp, "evaluate_diagnostic_answers")
+    data = _parse_json_response(text, "evaluate_diagnostic_answers")
+    raw_level = data.get("level")
+    if not isinstance(raw_level, str):
+        raise OpenAIError("evaluate_diagnostic_answers: missing or invalid level")
+    normalized = raw_level.strip().lower().replace("-", "_")
+    if normalized not in DIAGNOSTIC_LEVEL_KEYS:
+        raise OpenAIError("evaluate_diagnostic_answers: level out of allowed set")
+    return DIAGNOSTIC_LEVEL_LABEL_RU[normalized]
 
 
 async def generate_course_outline(
